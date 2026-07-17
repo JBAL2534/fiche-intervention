@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v2.6</title>
+<title>Fiche intervention – v2.7</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -181,15 +181,15 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.6</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.7</span></h1>
 
   <!-- Identité -->
   <div class="ident">
-    <div class="row"><label>Correspondant</label><input type="text" id="correspondant" placeholder="Dr …" autocomplete="off"></div>
+    <div class="row"><label>Correspondant</label><input type="text" id="correspondant" list="corrList" placeholder="Dr …" autocomplete="off"><datalist id="corrList"></datalist></div>
     <div class="row"><label>NOM</label><input type="text" id="nom" autocomplete="off"></div>
     <div class="row"><label>PRÉNOM</label><input type="text" id="prenom" autocomplete="off"></div>
     <div class="row"><label>N° DOSSIER</label><input type="text" id="dossier" class="sm" autocomplete="off"></div>
-    <div class="row"><label>DATE interv.</label><input type="text" id="date" placeholder="ex : mardi 07/07/2026" autocomplete="off"></div>
+    <div class="row"><label>DATE interv.</label><input type="text" id="date" placeholder="ex : mardi 07/07/2026" autocomplete="off"><input type="date" id="datePick" title="Choisir dans le calendrier" style="flex:0 0 auto;max-width:170px"></div>
   </div>
 
   <!-- Description de l'intervention -->
@@ -1097,6 +1097,29 @@
     dirHandle=null; updateFolderLabel();   // patient suivant : on redemandera le dossier
     live.textContent="Fiche réinitialisée.";
   });
+
+  // Correspondants : menu déroulant mémorisé (datalist)
+  var CORR_STORE="fiche-correspondants-v1";
+  var corrEl=document.getElementById("correspondant");
+  var corrListEl=document.getElementById("corrList");
+  var corrs=[];
+  try{ corrs=JSON.parse(localStorage.getItem(CORR_STORE)||"[]"); }catch(e){ corrs=[]; }
+  function renderCorr(){ corrListEl.innerHTML=""; corrs.forEach(function(c){ var o=document.createElement("option"); o.value=c; corrListEl.appendChild(o); }); }
+  function addCorr(v){ v=(v||"").trim(); if(!v) return; if(corrs.some(function(x){return x.toLowerCase()===v.toLowerCase();})) return; corrs.push(v); try{ localStorage.setItem(CORR_STORE, JSON.stringify(corrs)); }catch(e){} renderCorr(); }
+  renderCorr();
+  corrEl.addEventListener("change", function(){ addCorr(corrEl.value); });
+  corrEl.addEventListener("blur", function(){ addCorr(corrEl.value); });
+
+  // Date d'intervention : calendrier -> texte formaté FR
+  var datePick=document.getElementById("datePick");
+  if(datePick){
+    datePick.addEventListener("change", function(){
+      if(!datePick.value) return;
+      var d=new Date(datePick.value+"T00:00:00");
+      var s=d.toLocaleDateString("fr-FR",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
+      var el=document.getElementById("date"); el.value=s; save();
+    });
+  }
 
   // Ajout d'élément au doigt
   var cInput=document.getElementById("customInput");
