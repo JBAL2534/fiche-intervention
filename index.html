@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v2.5</title>
+<title>Fiche intervention – v2.6</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -181,7 +181,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.5</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.6</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -607,24 +607,49 @@
       return h.requestPermission(opt).then(function(p2){ return p2==="granted"; });
     });
   }
+  // Dossier du patient choisi UNE fois (à la 1re sauvegarde). Les
+  // enregistrements suivants y vont sans redemander. « Réinitialiser »
+  // (nouveau patient) remet ce dossier à zéro pour le patient suivant.
+  var dirHandle=null;
+  function updateFolderLabel(){
+    var wrap=document.getElementById("changeFolderWrap");
+    var link=document.getElementById("changeFolder");
+    if(!wrap || !link) return;
+    wrap.style.display="";
+    wrap.firstChild.nodeValue = dirHandle
+      ? "Dossier du patient : « "+(dirHandle.name||"choisi")+" »  "
+      : "Dossier du patient : ";
+    link.textContent = dirHandle ? "changer" : "choisir";
+  }
+  async function pickFolder(){
+    var last=await idbGet();
+    var opts={mode:"readwrite"};
+    if(last) opts.startIn=last;
+    var h;
+    try{ h=await window.showDirectoryPicker(opts); }
+    catch(err){ if(err && err.name==="AbortError") return null; h=await window.showDirectoryPicker({mode:"readwrite"}); }
+    await idbPut(h);
+    dirHandle=h; updateFolderLabel();
+    return h;
+  }
+  async function writePDF(h){
+    if(!(await ensurePerm(h))){ live.textContent="Écriture refusée pour ce dossier."; return; }
+    var bytes=buildPDF(drawFiche());
+    var name=buildTitle()+".pdf";
+    var fh=await h.getFileHandle(name,{create:true});
+    var w=await fh.createWritable(); await w.write(bytes); await w.close();
+    live.textContent="✓ Enregistré : "+name+" — dossier « "+(h.name||"choisi")+" ».";
+  }
   async function saveToFolder(){
     try{
-      // Le sélecteur s'ouvre À CHAQUE enregistrement : le PDF va exactement
-      // dans le dossier choisi (ex. le dossier du patient). Le dernier
-      // emplacement sert de point de départ pour éviter de renaviguer.
-      var last=await idbGet();
-      var opts={mode:"readwrite"};
-      if(last) opts.startIn=last;
-      var h;
-      try{ h=await window.showDirectoryPicker(opts); }
-      catch(err){ if(err && err.name==="AbortError") return; h=await window.showDirectoryPicker({mode:"readwrite"}); }
-      await idbPut(h);
-      if(!(await ensurePerm(h))){ live.textContent="Écriture refusée pour ce dossier."; return; }
-      var bytes=buildPDF(drawFiche());
-      var name=buildTitle()+".pdf";
-      var fh=await h.getFileHandle(name,{create:true});
-      var w=await fh.createWritable(); await w.write(bytes); await w.close();
-      live.textContent="✓ Enregistré : "+name+" — dossier « "+(h.name||"choisi")+" ».";
+      var h=dirHandle;
+      if(h){
+        var opt={mode:"readwrite"};
+        var p=await h.queryPermission(opt);
+        if(p!=="granted"){ var p2=await h.requestPermission(opt); if(p2!=="granted") h=null; }
+      }
+      if(!h){ h=await pickFolder(); if(!h) return; }   // 1re fois : on choisit le dossier du patient
+      await writePDF(h);
     }catch(e){
       if(e && e.name==="AbortError") return;
       live.textContent="Enregistrement impossible : "+((e&&e.message)||e);
@@ -633,6 +658,9 @@
   if(window.showDirectoryPicker){
     document.getElementById("savefolder").style.display="";
     document.getElementById("savefolder").addEventListener("click", saveToFolder);
+    var cf=document.getElementById("changeFolder");
+    if(cf) cf.addEventListener("click", function(ev){ ev.preventDefault(); dirHandle=null; pickFolder(); });
+    updateFolderLabel();
     // Sur PC, « Envoyer le PDF » (pensé pour le partage iPhone) fait doublon
     // avec l'enregistrement direct : on le masque.
     var shareBtn=document.getElementById("share");
@@ -1066,6 +1094,7 @@
     customs=[]; saveCustoms(); renderCustoms();
     implants=[]; saveImplants(); renderImplants();
     save();
+    dirHandle=null; updateFolderLabel();   // patient suivant : on redemandera le dossier
     live.textContent="Fiche réinitialisée.";
   });
 
