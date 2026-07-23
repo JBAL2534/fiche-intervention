@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.6</title>
+<title>Fiche intervention – v4.7</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -184,7 +184,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.6</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.7</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -1464,28 +1464,36 @@
   }
 
   var rec=null, chunks=[], recording=false;
+  function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Micro non disponible sur ce navigateur (utilisez Chrome ou Edge).",true); return; }
+    setMsg("① Démarrage… (v4.7)");                       // preuve immédiate que le clic est pris
+    btn.textContent="⏳ Préparation…";
+    if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
     // l'acces micro apres la fenetre de connexion) :
+    setMsg("② Accès au micro… autorisez si une fenêtre le demande.");
     var stream;
-    try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+    try{ stream=await withTimeout(navigator.mediaDevices.getUserMedia({audio:true}), 15000); }
     catch(e){
+      btn.textContent="🎤 Dicter la fiche";
       var n=(e&&e.name)||"";
       var m;
-      if(n==="NotFoundError"||n==="DevicesNotFoundError"||n==="OverconstrainedError")
+      if(n==="TimeoutError")
+        m="Le micro n'a pas répondu en 15 s (aucune autorisation reçue). Cliquez sur le 🎤/🔒 dans la barre d'adresse et choisissez « Toujours autoriser », branchez un micro, puis réessayez.";
+      else if(n==="NotFoundError"||n==="DevicesNotFoundError"||n==="OverconstrainedError")
         m="Aucun micro détecté sur ce poste. Branchez un micro (casque ou micro USB) puis réessayez.";
       else if(n==="NotAllowedError"||n==="SecurityError"||n==="PermissionDeniedError")
-        m="Micro bloqué. 1) Cliquez sur le 🔒/🎤 à gauche de l'adresse et autorisez le micro. 2) Windows : Paramètres › Confidentialité › Microphone › activez « autoriser les applications de bureau ».";
+        m="Micro bloqué. 1) Cliquez sur le 🎤/🔒 à gauche de l'adresse et autorisez le micro. 2) Windows : Paramètres › Confidentialité › Microphone › activez « autoriser les applications de bureau ».";
       else if(n==="NotReadableError"||n==="TrackStartError")
         m="Micro occupé par une autre application (Teams, Zoom, dictée…). Fermez-la puis réessayez.";
       else
         m="Micro indisponible ("+(n||"erreur inconnue")+"). Utilisez Chrome ou Edge et vérifiez qu'un micro est branché.";
       setMsg(m,true); return;
     }
+    setMsg("③ Micro OK.");
     // Connexion si besoin :
-    if(!token()){ var ok=await login(); if(!ok){ stream.getTracks().forEach(function(t){t.stop();}); return; } }
+    if(!token()){ setMsg("④ Connexion ADIA nécessaire pour la dictée…"); var ok=await login(); if(!ok){ stream.getTracks().forEach(function(t){t.stop();}); btn.textContent="🎤 Dicter la fiche"; setMsg("Connexion annulée : la dictée nécessite votre compte ADIA.",true); return; } }
     chunks=[]; rec=new MediaRecorder(stream);
     rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
     rec.onstop=async function(){
@@ -1509,7 +1517,7 @@
       }catch(err){ setMsg("Erreur : "+(err.message||err),true); }
     };
     rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictée"; btn.style.background="#b0243a";
-    setMsg("Parlez naturellement : avulsion, implants, materiel, PRF...");
+    setMsg("🔴 Enregistrement en cours — parlez, puis recliquez pour terminer.");
   }
 
   function addUI(){
@@ -1526,7 +1534,7 @@
     b.style.cssText="width:100%;padding:16px;font:700 19px/1 sans-serif;color:#fff;background:#1a3e6f;border:none;border-radius:12px;cursor:pointer";
     b.title="Dictée naturelle : l'IA remplit la fiche (connexion ADIA + internet)";
     b.addEventListener("click", function(){ toggleRecord(b); });
-    var msg=document.createElement("div"); msg.id="iaDicteeMsg"; msg.style.cssText="font-size:13px;color:#1a7a3a;margin-top:6px;min-height:16px";
+    var msg=document.createElement("div"); msg.id="iaDicteeMsg"; msg.style.cssText="font-size:14px;font-weight:600;color:#1a7a3a;margin-top:8px;min-height:20px;padding:6px 8px;border-radius:8px;background:#eef3fa";
     wrap.appendChild(b); wrap.appendChild(msg);
     // Bouton dictée APRÈS les coordonnées patient (pour dicter tout ce qui suit) :
     var ident=document.querySelector(".ident");
