@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v2.7</title>
+<title>Fiche intervention – v2.9</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -150,7 +150,8 @@
     <div id="live" class="live">Appuyez sur le micro et dictez <b>une commande, puis marquez une pause</b>. Ex : « avulsion oui » … « implant active 16 21 » … « comblement purgo zéro cinq » … « membrane txt 200 » … « prf quatre tubes rouges » … « nom Dupont ».</div>
     <div id="cmdlog" class="cmdlog"></div>
     <div class="btns">
-      <button id="savefolder" style="display:none">💾 Enregistrer dans le dossier</button>
+      <button id="savefolder" style="display:none">💾 Enregistrer (Word) dans le dossier</button>
+      <button id="pdffolder" style="display:none">📄 PDF dans le dossier</button>
       <button id="share">📤 Envoyer le PDF</button>
       <button id="word">📝 Word</button>
       <button id="print">🖨️ Imprimer</button>
@@ -181,11 +182,11 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.7</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.9</span></h1>
 
   <!-- Identité -->
   <div class="ident">
-    <div class="row"><label>Correspondant</label><input type="text" id="correspondant" list="corrList" placeholder="Dr …" autocomplete="off"><datalist id="corrList"></datalist></div>
+    <div class="row"><label>Correspondant</label><select id="corrSelect" style="flex:0 0 auto;max-width:190px"><option value="">— Choisir —</option></select><input type="text" id="correspondant" placeholder="ou saisir un nouveau" autocomplete="off"><button type="button" id="corrDel" title="Supprimer le correspondant sélectionné" class="addbtn" style="flex:0 0 auto">✕</button></div>
     <div class="row"><label>NOM</label><input type="text" id="nom" autocomplete="off"></div>
     <div class="row"><label>PRÉNOM</label><input type="text" id="prenom" autocomplete="off"></div>
     <div class="row"><label>N° DOSSIER</label><input type="text" id="dossier" class="sm" autocomplete="off"></div>
@@ -632,24 +633,45 @@
     dirHandle=h; updateFolderLabel();
     return h;
   }
+  async function resolveDirHandle(){
+    var h=dirHandle;
+    if(h){
+      var opt={mode:"readwrite"};
+      var p=await h.queryPermission(opt);
+      if(p!=="granted"){ var p2=await h.requestPermission(opt); if(p2!=="granted") h=null; }
+    }
+    if(!h){ h=await pickFolder(); }   // 1re fois : on choisit le dossier du patient
+    return h;
+  }
+  async function writeDoc(h){
+    if(!(await ensurePerm(h))){ live.textContent="Écriture refusée pour ce dossier."; return; }
+    var blob=new Blob(["\ufeff"+buildDocHTML()],{type:"application/msword"});
+    var name=buildTitle()+".doc";
+    var fh=await h.getFileHandle(name,{create:true});
+    var w=await fh.createWritable(); await w.write(blob); await w.close();
+    live.textContent="✓ Word enregistré : "+name+" — dossier « "+(h.name||"choisi")+" ».";
+  }
   async function writePDF(h){
     if(!(await ensurePerm(h))){ live.textContent="Écriture refusée pour ce dossier."; return; }
     var bytes=buildPDF(drawFiche());
     var name=buildTitle()+".pdf";
     var fh=await h.getFileHandle(name,{create:true});
     var w=await fh.createWritable(); await w.write(bytes); await w.close();
-    live.textContent="✓ Enregistré : "+name+" — dossier « "+(h.name||"choisi")+" ».";
+    live.textContent="✓ PDF enregistré : "+name+" — dossier « "+(h.name||"choisi")+" ».";
   }
   async function saveToFolder(){
     try{
-      var h=dirHandle;
-      if(h){
-        var opt={mode:"readwrite"};
-        var p=await h.queryPermission(opt);
-        if(p!=="granted"){ var p2=await h.requestPermission(opt); if(p2!=="granted") h=null; }
-      }
-      if(!h){ h=await pickFolder(); if(!h) return; }   // 1re fois : on choisit le dossier du patient
-      await writePDF(h);
+      var h=await resolveDirHandle(); if(!h) return;
+      await writeDoc(h);   // Word = document principal
+    }catch(e){
+      if(e && e.name==="AbortError") return;
+      live.textContent="Enregistrement impossible : "+((e&&e.message)||e);
+    }
+  }
+  async function savePdfToFolder(){
+    try{
+      var h=await resolveDirHandle(); if(!h) return;
+      await writePDF(h);   // PDF = accessoire
     }catch(e){
       if(e && e.name==="AbortError") return;
       live.textContent="Enregistrement impossible : "+((e&&e.message)||e);
@@ -658,13 +680,17 @@
   if(window.showDirectoryPicker){
     document.getElementById("savefolder").style.display="";
     document.getElementById("savefolder").addEventListener("click", saveToFolder);
+    var pdfBtn=document.getElementById("pdffolder");
+    if(pdfBtn){ pdfBtn.style.display=""; pdfBtn.addEventListener("click", savePdfToFolder); }
     var cf=document.getElementById("changeFolder");
     if(cf) cf.addEventListener("click", function(ev){ ev.preventDefault(); dirHandle=null; pickFolder(); });
     updateFolderLabel();
-    // Sur PC, « Envoyer le PDF » (pensé pour le partage iPhone) fait doublon
-    // avec l'enregistrement direct : on le masque.
+    // Sur PC, « Envoyer le PDF » (pensé pour le partage iPhone) et le
+    // téléchargement Word manuel font doublon avec l'enregistrement direct.
     var shareBtn=document.getElementById("share");
     if(shareBtn) shareBtn.style.display="none";
+    var wordBtn=document.getElementById("word");
+    if(wordBtn) wordBtn.style.display="none";
   }
   document.addEventListener("input", save, true);
   document.addEventListener("change", save, true);
@@ -1054,7 +1080,7 @@
     function c(id){var el=document.getElementById(id);return el?el.checked:false;}
     function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
     function line(x){ return x?esc(x):"____________________"; }
-    function box(ck,label){ return "<span style='font-size:14pt'>"+(ck?"&#9746;":"&#9744;")+"</span> "+esc(label); }
+    function box(ck,label){ var L=esc(label).replace(/ /g,"&nbsp;"); return "<span style='white-space:nowrap'><span style='font-size:14pt"+(ck?";color:#d40000;font-weight:bold":"")+"'>"+(ck?"&#9746;":"&#9744;")+"</span>&nbsp;"+(ck?"<b style='color:#d40000'>"+L+"</b>":L)+"</span>"; }
     function grp(arr){ return arr.map(function(a){return box(c(a[0]),a[1]);}).join(" &nbsp;&nbsp; "); }
     var impRows = implants.length ? implants.map(function(it,i){
       return "<tr><td>"+(i+1)+"</td><td>"+esc(it.sys)+"</td><td>"+line(it.dent)+"</td><td>"+line(it.spec)+"</td></tr>";
@@ -1098,17 +1124,28 @@
     live.textContent="Fiche réinitialisée.";
   });
 
-  // Correspondants : menu déroulant mémorisé (datalist)
+  // Correspondants : menu déroulant mémorisé
   var CORR_STORE="fiche-correspondants-v1";
   var corrEl=document.getElementById("correspondant");
-  var corrListEl=document.getElementById("corrList");
+  var corrSel=document.getElementById("corrSelect");
+  var corrDel=document.getElementById("corrDel");
   var corrs=[];
   try{ corrs=JSON.parse(localStorage.getItem(CORR_STORE)||"[]"); }catch(e){ corrs=[]; }
-  function renderCorr(){ corrListEl.innerHTML=""; corrs.forEach(function(c){ var o=document.createElement("option"); o.value=c; corrListEl.appendChild(o); }); }
-  function addCorr(v){ v=(v||"").trim(); if(!v) return; if(corrs.some(function(x){return x.toLowerCase()===v.toLowerCase();})) return; corrs.push(v); try{ localStorage.setItem(CORR_STORE, JSON.stringify(corrs)); }catch(e){} renderCorr(); }
+  function renderCorr(){
+    corrSel.innerHTML="<option value=''>— Choisir —</option>";
+    corrs.forEach(function(c){ var o=document.createElement("option"); o.value=c; o.textContent=c; corrSel.appendChild(o); });
+    if(corrEl.value && corrs.indexOf(corrEl.value)>=0) corrSel.value=corrEl.value;
+  }
+  function saveCorr(){ try{ localStorage.setItem(CORR_STORE, JSON.stringify(corrs)); }catch(e){} }
+  function addCorr(v){ v=(v||"").trim(); if(!v) return; if(!corrs.some(function(x){return x.toLowerCase()===v.toLowerCase();})){ corrs.push(v); saveCorr(); } renderCorr(); corrSel.value=v; }
   renderCorr();
-  corrEl.addEventListener("change", function(){ addCorr(corrEl.value); });
+  corrSel.addEventListener("change", function(){ if(corrSel.value){ corrEl.value=corrSel.value; save(); } });
   corrEl.addEventListener("blur", function(){ addCorr(corrEl.value); });
+  corrDel.addEventListener("click", function(){
+    var v=corrSel.value; if(!v) return;
+    corrs=corrs.filter(function(x){return x!==v;}); saveCorr(); renderCorr();
+    if(corrEl.value===v){ corrEl.value=""; save(); }
+  });
 
   // Date d'intervention : calendrier -> texte formaté FR
   var datePick=document.getElementById("datePick");
