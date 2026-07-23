@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v2.9</title>
+<title>Fiche intervention – v3.0</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v2.9</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v3.0</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -302,6 +302,42 @@
     }catch(e){}
   }
   load();  // restaure la saisie précédente au chargement
+
+  // --- Pré-remplissage depuis la passerelle ADIA -----------------------
+  // La passerelle injecte window.__ADIA_PATIENT__ = {patient_label,
+  // patient_folder_id} dans cette fiche (fichier « Plan de traitement*.html »
+  // du dossier patient). On remplit NOM / PRÉNOM / N° DOSSIER. Si la passerelle
+  // annonce un patient DIFFÉRENT de celui restauré, il prend la main (évite de
+  // rester bloqué sur le patient précédent) ; sinon on ne touche à rien.
+  function splitPatientLabelAdia(label){
+    var toks=String(label||"").trim().split(/\s+/).filter(Boolean);
+    if(!toks.length) return {nom:"",prenom:""};
+    var nom=[], i=0;
+    while(i<toks.length && toks[i]===toks[i].toUpperCase() && /[A-ZÀ-Ý]/.test(toks[i])){ nom.push(toks[i]); i++; }
+    if(!nom.length){ nom.push(toks[0]); i=1; }
+    var prenom=toks.slice(i);
+    if(!prenom.length && nom.length>1){ prenom=[nom.pop()]; }   // « DUPONT JEAN » -> nom DUPONT, prénom JEAN
+    return {nom:nom.join(" "), prenom:prenom.join(" ")};
+  }
+  function applyAdiaPatient(){
+    try{
+      var p=window.__ADIA_PATIENT__;
+      if(!p || (!p.patient_folder_id && !p.patient_label)) return;
+      var elNom=document.getElementById("nom"), elPre=document.getElementById("prenom"), elDos=document.getElementById("dossier");
+      var folder=String(p.patient_folder_id||"").trim();
+      var current=(elDos&&elDos.value||"").trim();
+      var vide=!(elNom&&elNom.value.trim()) && !(elPre&&elPre.value.trim()) && !current;
+      var nouveau=folder && folder!==current;   // patient différent de celui restauré
+      if(!(vide || nouveau)) return;             // même patient / saisie en cours : on laisse
+      var np=splitPatientLabelAdia(p.patient_label);
+      if(elNom) elNom.value=np.nom;
+      if(elPre) elPre.value=np.prenom;
+      if(elDos && folder) elDos.value=folder;
+      if(typeof save==="function") save();
+    }catch(e){}
+  }
+  applyAdiaPatient();
+
 
   // --- Éléments personnalisés (hors liste) ---
   var CSTORE="fiche-intervention-customs-v1";
