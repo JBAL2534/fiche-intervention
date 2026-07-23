@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v3.0</title>
+<title>Fiche intervention – v4.0</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v3.0</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.0</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -220,39 +220,8 @@
 
   <!-- 3 -->
   <section>
-    <h2>3/ Matériel</h2>
-    <div class="grid">
-      <label class="chk"><input type="checkbox" id="pilier"> pilier provisoire</label>
-      <label class="chk"><input type="checkbox" id="pins"> pins</label>
-    </div>
-    <div class="sub">
-      <span class="cat">comblement</span>
-      <label class="chk"><input type="checkbox" id="creos025"> Creos 0,25</label>
-      <label class="chk"><input type="checkbox" id="creos05"> Creos 0,5</label>
-      <label class="chk"><input type="checkbox" id="purgo025"> Purgo 0,25</label>
-      <label class="chk"><input type="checkbox" id="purgo05"> Purgo 0,5</label>
-      <label class="chk"><input type="checkbox" id="gto"> GTO</label>
-      <label class="chk"><input type="checkbox" id="biobank"> Biobank</label>
-    </div>
-    <div class="sub">
-      <span class="cat">membrane</span>
-      <label class="chk"><input type="checkbox" id="txt200"> TXT-200</label>
-      <label class="chk"><input type="checkbox" id="creos1520"> Creos 15×20</label>
-      <label class="chk"><input type="checkbox" id="creos2530"> Creos 25×30</label>
-    </div>
-    <div class="grid">
-      <label class="chk"><input type="checkbox" id="cangle"> contre-angle rouge</label>
-      <label class="chk"><input type="checkbox" id="piece"> pièce à main</label>
-      <label class="chk"><input type="checkbox" id="guide"> guide labo</label>
-    </div>
-    <div class="sub">
-      <span class="cat">Empreintes</span>
-      <label class="chk"><input type="checkbox" id="alv"> ALV</label>
-      <label class="chk"><input type="checkbox" id="wyart"> WYART</label>
-    </div>
-    <div class="grid">
-      <label class="chk"><input type="checkbox" id="versah"> Forets Versah</label>
-    </div>
+    <h2>3/ Matériel <button id="matEditBtn" type="button" class="addbtn" style="float:right;font-size:13px;padding:4px 10px">✏️ Modifier la liste</button></h2>
+    <div id="matGroups"></div>
   </section>
 
   <!-- 4 -->
@@ -399,6 +368,116 @@
     if(box.lastChild) flash(box.lastChild.querySelector("input"));
   }
   renderCustoms();
+
+  // ===== Matériel MODIFIABLE : source unique (écran + dictée + Word + PDF) =====
+  var FIXED_CHECKS = [
+    {id:"avul_oui", label:"Avulsion : oui", keys:["avulsion oui","implantation immediate oui"]},
+    {id:"avul_non", label:"Avulsion : non", keys:["avulsion non","implantation immediate non","pas d avulsion"]}
+  ];
+  var MSTORE = "fiche-materiel-v1";
+  var MAT_DEFAULT = [
+    {title:"Comblement", items:[
+      {id:"creos025",label:"Creos 0,25",keys:["creos 0 25","creos 025"]},
+      {id:"creos05",label:"Creos 0,5",keys:["creos 0 5","creos 05"]},
+      {id:"purgo025",label:"Purgo 0,25",keys:["purgo 0 25","purgo 025"]},
+      {id:"purgo05",label:"Purgo 0,5",keys:["purgo 0 5","purgo 05"]},
+      {id:"gto",label:"GTO",keys:["gto"]},
+      {id:"biobank",label:"Biobank",keys:["biobank"]}
+    ]},
+    {title:"Membrane", items:[
+      {id:"txt200",label:"TXT-200",keys:["txt 200","txt200","txt 2 100"]},
+      {id:"creos1520",label:"Creos 15×20",keys:["creos 15 20","creos 1520","15 par 20"]},
+      {id:"creos2530",label:"Creos 25×30",keys:["creos 25 30","creos 2530","25 par 30"]}
+    ]},
+    {title:"Empreintes", items:[
+      {id:"alv",label:"ALV",keys:["empreinte alv","alv"]},
+      {id:"wyart",label:"WYART",keys:["empreinte wyart","wyart"]}
+    ]},
+    {title:"Divers", items:[
+      {id:"pilier",label:"pilier provisoire",keys:["pilier provisoire","pilier"]},
+      {id:"pins",label:"pins",keys:["pins","pin","pines","pinces","pain","pains"]},
+      {id:"cangle",label:"contre-angle rouge",keys:["contre-angle rouge","contre-angle"]},
+      {id:"piece",label:"pièce à main",keys:["piece a main"]},
+      {id:"guide",label:"guide labo",keys:["guide labo","guide"]},
+      {id:"versah",label:"Forets Versah",keys:["foret versah","versah"]}
+    ]}
+  ];
+  var matModel;
+  try{ matModel = JSON.parse(localStorage.getItem(MSTORE)); }catch(e){}
+  if(!Array.isArray(matModel) || !matModel.length) matModel = JSON.parse(JSON.stringify(MAT_DEFAULT));
+  function saveMat(){ try{ localStorage.setItem(MSTORE, JSON.stringify(matModel)); }catch(e){} }
+  var matEdit=false, _matCtr=0;
+  function newMatId(){ _matCtr++; return "matx_"+Date.now().toString(36)+"_"+_matCtr; }
+  function normKey(s){ return (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+
+  function rebuildChecks(){
+    var arr = FIXED_CHECKS.slice();
+    matModel.forEach(function(g){ g.items.forEach(function(it){
+      var keys = (it.keys && it.keys.length) ? it.keys.slice() : [];
+      var nk = normKey(it.label); if(nk && keys.indexOf(nk)<0) keys.push(nk);
+      arr.push({id:it.id, label:it.label, keys:keys});
+    }); });
+    CHECKS = arr;
+  }
+
+  function renderMat(){
+    var host=document.getElementById("matGroups"); if(!host) return;
+    var cur={}; host.querySelectorAll("input[type=checkbox]").forEach(function(cb){ cur[cb.id]=cb.checked; });
+    var saved={}; try{ saved=JSON.parse(localStorage.getItem(STORE)||"{}"); }catch(e){}
+    host.innerHTML="";
+    matModel.forEach(function(g,gi){
+      var box=document.createElement("div"); box.className="sub";
+      var cat=document.createElement("span"); cat.className="cat"; cat.textContent=g.title||"";
+      if(matEdit){ cat.style.cursor="text"; cat.title="Double-clic pour renommer le groupe";
+        cat.addEventListener("dblclick", function(){ var v=prompt("Renommer le groupe :", g.title||""); if(v!=null){ g.title=v.trim(); saveMat(); renderMat(); } }); }
+      box.appendChild(cat);
+      g.items.forEach(function(it,ii){
+        var lab=document.createElement("label"); lab.className="chk";
+        var cb=document.createElement("input"); cb.type="checkbox"; cb.id=it.id;
+        cb.checked = (it.id in cur) ? cur[it.id] : !!saved[it.id];
+        cb.addEventListener("change", save);
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(" "+it.label));
+        if(matEdit){
+          lab.title="Double-clic pour renommer";
+          lab.addEventListener("dblclick", function(e){ if(e.target===cb) return; var v=prompt("Renommer :", it.label); if(v!=null && v.trim()){ it.label=v.trim(); saveMat(); renderMat(); rebuildChecks(); } });
+          var del=document.createElement("span"); del.textContent=" ✕"; del.style.cssText="color:#b0243a;cursor:pointer;font-weight:700;margin-left:4px";
+          del.title="Supprimer cet élément";
+          del.addEventListener("click", function(e){ e.preventDefault(); e.stopPropagation(); g.items.splice(ii,1); saveMat(); renderMat(); rebuildChecks(); });
+          lab.appendChild(del);
+        }
+        box.appendChild(lab);
+      });
+      if(matEdit){
+        var add=document.createElement("button"); add.type="button"; add.className="addbtn"; add.textContent="＋ élément"; add.style.marginLeft="6px";
+        add.addEventListener("click", function(){ var v=prompt("Nouvel élément :"); if(v && v.trim()){ g.items.push({id:newMatId(),label:v.trim(),keys:[]}); saveMat(); renderMat(); rebuildChecks(); } });
+        box.appendChild(add);
+        var dg=document.createElement("button"); dg.type="button"; dg.className="addbtn alt"; dg.textContent="✕ groupe"; dg.style.marginLeft="6px";
+        dg.addEventListener("click", function(){ if(confirm("Supprimer le groupe « "+(g.title||"")+" » et ses éléments ?")){ matModel.splice(gi,1); saveMat(); renderMat(); rebuildChecks(); } });
+        box.appendChild(dg);
+      }
+      host.appendChild(box);
+    });
+    if(matEdit){
+      var wrap=document.createElement("div"); wrap.className="row addrow"; wrap.style.marginTop="8px";
+      var ag=document.createElement("button"); ag.type="button"; ag.className="addbtn"; ag.textContent="＋ groupe";
+      ag.addEventListener("click", function(){ var v=prompt("Nom du nouveau groupe :"); if(v!=null){ matModel.push({title:v.trim(),items:[]}); saveMat(); renderMat(); }});
+      var rs=document.createElement("button"); rs.type="button"; rs.className="addbtn alt"; rs.textContent="↺ Liste d'origine";
+      rs.addEventListener("click", function(){ if(confirm("Revenir à la liste d'origine ? Vos ajouts seront perdus.")){ matModel=JSON.parse(JSON.stringify(MAT_DEFAULT)); saveMat(); renderMat(); rebuildChecks(); }});
+      wrap.appendChild(ag); wrap.appendChild(rs); host.appendChild(wrap);
+    }
+  }
+  function matWordHtml(){
+    function box(ck,label){ var L=String(label).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/ /g,"&nbsp;"); return "<span style='white-space:nowrap'><span style='font-size:14pt"+(ck?";color:#d40000;font-weight:bold":"")+"'>"+(ck?"&#9746;":"&#9744;")+"</span>&nbsp;"+(ck?"<b style='color:#d40000'>"+L+"</b>":L)+"</span>"; }
+    return matModel.map(function(g){
+      var el=document.createElement("div"); // pour lire l'état coché courant par id
+      var items=g.items.map(function(it){ var cb=document.getElementById(it.id); return box(cb?cb.checked:false, it.label); }).join(" &nbsp;&nbsp; ");
+      return "<p>"+(g.title?"<b>"+g.title+" :</b> ":"")+items+"</p>";
+    }).join("");
+  }
+  var _matBtn=document.getElementById("matEditBtn");
+  if(_matBtn) _matBtn.addEventListener("click", function(){ matEdit=!matEdit; _matBtn.textContent=matEdit?"✓ Terminer":"✏️ Modifier la liste"; renderMat(); });
+  renderMat();
+  rebuildChecks();
 
   // --- Vocabulaire personnalisé (noms propres) ---
   var VSTORE="fiche-vocab-v1";
@@ -621,10 +700,7 @@
       var got=arr.filter(function(a){return chk(a[0]);}).map(function(a){return a[1];});
       if(got.length){ any=true; T(ML+10,Y,titre,"F2",10.5,NAVY); T(ML+100,Y,got.join(",   "),"F1",11); nl(15); }
     }
-    grp("comblement",[["creos025","Creos 0,25"],["creos05","Creos 0,5"],["purgo025","Purgo 0,25"],["purgo05","Purgo 0,5"],["gto","GTO"],["biobank","Biobank"]]);
-    grp("membrane",[["txt200","TXT-200"],["creos1520","Creos 15x20"],["creos2530","Creos 25x30"]]);
-    grp("empreintes",[["alv","ALV"],["wyart","WYART"]]);
-    grp("divers",[["pilier","pilier provisoire"],["pins","pins"],["cangle","contre-angle rouge"],["piece","piece a main"],["guide","guide labo"],["versah","Forets Versah"]]);
+    matModel.forEach(function(g){ grp(g.title||"", g.items.map(function(it){return [it.id,it.label];})); });
     if(!any){ T(ML+10,Y,"-","F4",11,GREY); nl(15); }
 
     // ---- 4/ PRF ----
@@ -855,27 +931,7 @@
   }
 
   // --- Table de reconnaissance des cases : mots-clés (déjà normalisés) ---
-  var CHECKS = [
-    {id:"avul_oui", label:"Avulsion : oui", keys:["avulsion oui","implantation immediate oui"]},
-    {id:"avul_non", label:"Avulsion : non", keys:["avulsion non","implantation immediate non","pas d avulsion"]},
-    {id:"pilier",   label:"pilier provisoire", keys:["pilier provisoire","pilier"]},
-    {id:"pins",     label:"pins", keys:["pins","pin","pines","pinces","pain","pains"]},
-    {id:"creos025", label:"Creos 0,25", keys:["creos 0 25","creos 025"]},
-    {id:"creos05",  label:"Creos 0,5", keys:["creos 0 5","creos 05"]},
-    {id:"purgo025", label:"Purgo 0,25", keys:["purgo 0 25","purgo 025"]},
-    {id:"purgo05",  label:"Purgo 0,5", keys:["purgo 0 5","purgo 05"]},
-    {id:"gto",      label:"GTO", keys:["gto"]},
-    {id:"biobank",  label:"Biobank", keys:["biobank"]},
-    {id:"txt200",   label:"TXT-200", keys:["txt 200","txt200","txt 2 100"]},
-    {id:"creos1520",label:"Creos 15×20", keys:["creos 15 20","creos 1520","15 par 20"]},
-    {id:"creos2530",label:"Creos 25×30", keys:["creos 25 30","creos 2530","25 par 30"]},
-    {id:"cangle",   label:"contre-angle rouge", keys:["contre-angle rouge","contre-angle"]},
-    {id:"piece",    label:"pièce à main", keys:["piece a main"]},
-    {id:"guide",    label:"guide labo", keys:["guide labo","guide"]},
-    {id:"alv",      label:"empreinte ALV", keys:["empreinte alv","alv"]},
-    {id:"wyart",    label:"empreinte WYART", keys:["empreinte wyart","wyart"]},
-    {id:"versah",   label:"Forets Versah", keys:["foret versah","versah"]}
-  ];
+  var CHECKS = [];   // reconstruit par rebuildChecks() à partir du modèle Matériel
 
   // --- Champs texte : mot déclencheur -> id ---
   var TEXTS = [
@@ -1165,10 +1221,7 @@
      +"<h3>1/ Avulsion – implantation immédiate</h3><p>"+box(c("avul_oui"),"oui")+" &nbsp;&nbsp; "+box(c("avul_non"),"non")+"</p>"
      +"<h3>2/ Implants</h3><table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse'><tr><th></th><th>Système</th><th>Dent</th><th>Ø × L / réf</th></tr>"+impRows+"</table>"
      +"<h3>3/ Matériel</h3>"
-     +"<p><b>Comblement :</b> "+grp([["creos025","Creos 0,25"],["creos05","Creos 0,5"],["purgo025","Purgo 0,25"],["purgo05","Purgo 0,5"],["gto","GTO"],["biobank","Biobank"]])+"</p>"
-     +"<p><b>Membrane :</b> "+grp([["txt200","TXT-200"],["creos1520","Creos 15×20"],["creos2530","Creos 25×30"]])+"</p>"
-     +"<p>"+grp([["pilier","pilier provisoire"],["pins","pins"],["cangle","contre-angle rouge"],["piece","pièce à main"],["guide","guide labo"],["versah","Forets Versah"]])+"</p>"
-     +"<p><b>Empreintes :</b> "+grp([["alv","ALV"],["wyart","WYART"]])+"</p>"
+     +matWordHtml()
      +"<h3>4/ PRF</h3><p>"+box(c("prf_rouge"),(v("prf_rouge_n")||"___")+" tubes rouges")+" &nbsp;&nbsp; "+box(c("prf_blanc"),(v("prf_blanc_n")||"___")+" tubes blancs")+"</p>"
      +(cust?"<h3>Autres éléments</h3><ul>"+cust+"</ul>":"")
      +"</body></html>";
