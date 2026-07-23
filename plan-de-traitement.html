@@ -1,6 +1,56 @@
 <!DOCTYPE html>
 <html>
-<head>
+<head><script id="adia-local-import">
+(function(){
+  function nativeSet(el,val){
+    var d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+    d.set.call(el,val); el.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function fill(label,folder){
+    var nom=document.querySelector('input[placeholder="Nom PrXXXnom"]'.replace('XXX','é'));
+    var dos=document.querySelector('input[placeholder="Julie"]');
+    var ok=false;
+    if(nom && label){ nativeSet(nom,label); ok=true; }
+    if(dos && folder){ nativeSet(dos,folder); ok=true; }
+    return ok;
+  }
+  function waitFill(label,folder,n){ if(fill(label,folder))return; if(n>0)setTimeout(function(){waitFill(label,folder,n-1);},250); }
+  async function fetchPatient(){
+    var urls=["http://127.0.0.1:8765/patient-admin/latest","http://localhost:8765/patient-admin/latest"];
+    for(var i=0;i<urls.length;i++){
+      try{ var r=await fetch(urls[i],{cache:'no-store'}); if(!r.ok) continue;
+        var d=await r.json();
+        var label=(d&&d.patient_label||'').toString().trim();
+        var folder=(d&&d.patient_folder_id||'').toString().trim();
+        if(!label && !folder) return {empty:true};
+        window.__ADIA_PATIENT__={patient_label:label,patient_folder_id:folder};
+        return {label:label,folder:folder};
+      }catch(e){}
+    }
+    return null;
+  }
+  async function importPatient(){
+    var b=document.getElementById('adia-import-btn'); if(b) b.textContent='Lecture…';
+    var res=await fetchPatient();
+    if(res && (res.label||res.folder)){ waitFill(res.label,res.folder,20);
+      if(b){ b.textContent='✓ '+(res.label||res.folder); setTimeout(function(){b.textContent='Importer patient (ADIA)';},2600); }
+    } else if(b){ b.textContent = res&&res.empty ? 'Aucun patient synchronisé (Ctrl+Alt+A)' : 'Passerelle non trouvée';
+      setTimeout(function(){b.textContent='Importer patient (ADIA)';},3200); }
+  }
+  function addBtn(){
+    if(document.getElementById('adia-import-btn')) return;
+    if(!document.body) return;
+    var b=document.createElement('button');
+    b.id='adia-import-btn'; b.type='button'; b.textContent='Importer patient (ADIA)';
+    b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:99999;padding:12px 16px;font:600 14px/1 -apple-system,Segoe UI,Arial,sans-serif;color:#fff;background:#1a3e6f;border:none;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.28);cursor:pointer';
+    b.addEventListener('click', importPatient);
+    document.body.appendChild(b);
+  }
+  var iv=setInterval(function(){ if(document.body){ addBtn(); if(document.getElementById('adia-import-btn')) clearInterval(iv); } }, 400);
+  setTimeout(function(){ clearInterval(iv); }, 12000);
+})();
+</script>
+
   <meta charset="utf-8">
   <title>Bundled Page</title>
   <style>
