@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.3</title>
+<title>Fiche intervention – v4.4</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.3</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.4</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -1298,7 +1298,7 @@
   function token(){ try{return localStorage.getItem(TOK)||"";}catch(e){return "";} }
   function setToken(t){ try{localStorage.setItem(TOK,t||"");}catch(e){} }
   function norm(s){ return (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
-  function setMsg(t){ var el=document.getElementById("iaDicteeMsg"); if(el) el.textContent=t||""; }
+  function setMsg(t,err){ var el=document.getElementById("iaDicteeMsg"); if(el){ el.textContent=t||""; el.style.color=err?"#b0243a":"#1a7a3a"; el.style.fontWeight=err?"600":"400"; } }
 
   async function login(){
     return new Promise(function(resolve){
@@ -1380,18 +1380,21 @@
   var rec=null, chunks=[], recording=false;
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    if(!token()){ var ok=await login(); if(!ok) return; }
-    if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Micro non disponible (Chrome/Edge requis)."); return; }
+    if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Micro non disponible sur ce navigateur (utilisez Chrome ou Edge).",true); return; }
+    // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
+    // l'acces micro apres la fenetre de connexion) :
     var stream;
     try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-    catch(e){ setMsg("Micro refuse."); return; }
+    catch(e){ setMsg("Acces au micro refuse. Cliquez sur l'icone camera/micro de la barre d'adresse et autorisez, puis reessayez.",true); return; }
+    // Connexion si besoin :
+    if(!token()){ var ok=await login(); if(!ok){ stream.getTracks().forEach(function(t){t.stop();}); return; } }
     chunks=[]; rec=new MediaRecorder(stream);
     rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
     rec.onstop=async function(){
       stream.getTracks().forEach(function(t){t.stop();});
       recording=false; btn.textContent="🎤 Dicter la fiche"; btn.style.background="#1a3e6f";
       var blob=new Blob(chunks,{type: rec.mimeType||"audio/webm"});
-      if(blob.size<600){ setMsg("Enregistrement trop court."); return; }
+      if(blob.size<600){ setMsg("Enregistrement trop court — reparlez un peu plus longtemps.",true); return; }
       try{
         setMsg("Transcription...");
         var form=new FormData(); form.append("audio",blob,"dictee.webm");
@@ -1399,13 +1402,13 @@
         form.append("context", "Dictée opératoire télégraphique en implantologie : numéros de dents (ex. 14, 26, 36), abréviations (exp = exposition, BPRF, CPRI, ALV, WYART), systèmes d'implant (actif, parallèle). Restituer ces termes tels quels.");
         var tr=await fetch(SB_URL+"/functions/v1/transcribe-audio",{method:"POST",headers:{"apikey":SB_KEY,"Authorization":"Bearer "+token()},body:form});
         var td=await tr.json();
-        if(tr.status===401){ setToken(""); setMsg("Session expiree - reconnectez-vous."); return; }
-        if(!tr.ok || !td.text){ throw new Error(td.error||"Transcription vide"); }
+        if(tr.status===401){ setToken(""); setMsg("Session expiree — recliquez pour vous reconnecter.",true); return; }
+        if(!tr.ok || !td.text){ throw new Error((td && td.error) || ("Transcription: HTTP "+tr.status)); }
         setMsg("Analyse de la dictee...");
         var o=await extract(td.text);
         var n=applyExtraction(o);
         setMsg("✓ Fiche remplie ("+n+" element(s) coche(s)). Transcription : « "+td.text.slice(0,80)+"... »");
-      }catch(err){ setMsg("Erreur : "+(err.message||err)); }
+      }catch(err){ setMsg("Erreur : "+(err.message||err),true); }
     };
     rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictée"; btn.style.background="#b0243a";
     setMsg("Parlez naturellement : avulsion, implants, materiel, PRF...");
@@ -1427,7 +1430,20 @@
     b.addEventListener("click", function(){ toggleRecord(b); });
     var msg=document.createElement("div"); msg.id="iaDicteeMsg"; msg.style.cssText="font-size:13px;color:#1a7a3a;margin-top:6px;min-height:16px";
     wrap.appendChild(b); wrap.appendChild(msg);
-    bar.insertBefore(wrap, bar.firstChild);
+    // Bouton dictée APRÈS les coordonnées patient (pour dicter tout ce qui suit) :
+    var ident=document.querySelector(".ident");
+    if(ident && ident.parentNode){ ident.parentNode.insertBefore(wrap, ident.nextSibling); }
+    else { bar.insertBefore(wrap, bar.firstChild); }
+    // Réorganiser : Réinitialiser reste en haut, les enregistrements vont EN BAS.
+    try{
+      var page=document.querySelector(".page");
+      var btns=document.querySelector(".btns");
+      var reset=document.getElementById("reset");
+      if(page && btns){
+        if(reset) bar.appendChild(reset);   // Réinitialiser -> haut
+        page.appendChild(btns);             // Enregistrer / PDF / Imprimer -> bas
+      }
+    }catch(e){}
     return true;
   }
   var iv=setInterval(function(){ if(addUI()) clearInterval(iv); }, 400);
