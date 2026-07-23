@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.2</title>
+<title>Fiche intervention – v4.3</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.2</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.3</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -198,7 +198,7 @@
   <section>
     <h2>Intervention</h2>
     <div class="row addrow" style="margin:0 0 8px"><button id="descMic" type="button" class="addbtn">🎤 Dicter ici</button><span style="font-size:13px;color:#777">le texte dicté s'ajoute au cadre, mot pour mot</span></div>
-    <textarea id="description" rows="4" placeholder="Décrire le geste (dictée possible en touchant la zone)…"></textarea>
+    <textarea id="description" rows="4" placeholder="Décrire le geste opératoire…"></textarea>
   </section>
 
   <!-- 1 -->
@@ -1335,7 +1335,8 @@
       "PRF","tubes rouges","tubes blancs","BPRF","CPRI","exp","exposition","ALV","WYART",
       "pilier provisoire","pins","contre-angle rouge","pièce à main","guide labo","forets Versah",
       "Straumann","Nobel","comblement","membrane","empreinte","provisoire","cicatrisation"];
-    return fixed.concat(mats).join(", ");
+    var vocab=""; try{ var vv=JSON.parse(localStorage.getItem("fiche-vocab-v1")||"[]"); if(Array.isArray(vv)) vocab=vv.join(", "); }catch(e){}
+    return fixed.concat(mats).join(", ") + (vocab ? ", "+vocab : "");
   }
   function matLabels(){
     return [].slice.call(document.querySelectorAll("#matGroups label.chk")).map(function(l){
@@ -1388,7 +1389,7 @@
     rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
     rec.onstop=async function(){
       stream.getTracks().forEach(function(t){t.stop();});
-      recording=false; btn.textContent="🎤 Dicter (IA)"; btn.style.background="#1a3e6f";
+      recording=false; btn.textContent="🎤 Dicter la fiche"; btn.style.background="#1a3e6f";
       var blob=new Blob(chunks,{type: rec.mimeType||"audio/webm"});
       if(blob.size<600){ setMsg("Enregistrement trop court."); return; }
       try{
@@ -1406,23 +1407,27 @@
         setMsg("✓ Fiche remplie ("+n+" element(s) coche(s)). Transcription : « "+td.text.slice(0,80)+"... »");
       }catch(err){ setMsg("Erreur : "+(err.message||err)); }
     };
-    rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictee"; btn.style.background="#b0243a";
+    rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictée"; btn.style.background="#b0243a";
     setMsg("Parlez naturellement : avulsion, implants, materiel, PRF...");
   }
 
   function addUI(){
     if(document.getElementById("iaDicteeBtn")) return true;
-    var live=document.getElementById("live"); if(!live) return false;
-    var wrap=document.createElement("div"); wrap.style.cssText="margin:8px 0";
+    var bar=document.querySelector(".bar"); if(!bar) return false;
+    // Masquer TOUTE l'ancienne dictée (moteur navigateur, imprécis et redondant) :
+    ["micFab","mic","live","cmdlog"].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.display="none"; });
+    var dm=document.getElementById("descMic"); if(dm && dm.parentNode) dm.parentNode.style.display="none";
+    [].forEach.call(document.querySelectorAll("details"), function(d){ var sm=d.querySelector("summary"); if(sm && /commandes vocales/i.test(sm.textContent)) d.style.display="none"; });
+    // Bouton IA unique, en HAUT et en grand :
+    var wrap=document.createElement("div"); wrap.style.cssText="margin:0 0 6px";
     var b=document.createElement("button"); b.id="iaDicteeBtn"; b.type="button";
-    b.textContent="🎤 Dicter (IA)";
-    b.style.cssText="padding:12px 16px;font:700 15px/1 sans-serif;color:#fff;background:#1a3e6f;border:none;border-radius:10px;cursor:pointer";
-    b.title="Essai : dictee naturelle, l'IA remplit la fiche (connexion ADIA + internet)";
+    b.textContent="🎤 Dicter la fiche";
+    b.style.cssText="width:100%;padding:16px;font:700 19px/1 sans-serif;color:#fff;background:#1a3e6f;border:none;border-radius:12px;cursor:pointer";
+    b.title="Dictée naturelle : l'IA remplit la fiche (connexion ADIA + internet)";
     b.addEventListener("click", function(){ toggleRecord(b); });
-    var badge=document.createElement("span"); badge.textContent=" essai"; badge.style.cssText="font-size:11px;color:#888;margin-left:6px";
     var msg=document.createElement("div"); msg.id="iaDicteeMsg"; msg.style.cssText="font-size:13px;color:#1a7a3a;margin-top:6px;min-height:16px";
-    wrap.appendChild(b); wrap.appendChild(badge); wrap.appendChild(msg);
-    live.parentNode.insertBefore(wrap, live.nextSibling);
+    wrap.appendChild(b); wrap.appendChild(msg);
+    bar.insertBefore(wrap, bar.firstChild);
     return true;
   }
   var iv=setInterval(function(){ if(addUI()) clearInterval(iv); }, 400);
