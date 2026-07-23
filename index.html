@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.5.1</title>
+<title>Fiche intervention – v4.6</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -150,6 +150,8 @@
     <div id="live" class="live">Appuyez sur le micro et dictez <b>une commande, puis marquez une pause</b>. Ex : « avulsion oui » … « implant active 16 21 » … « comblement purgo zéro cinq » … « membrane txt 200 » … « prf quatre tubes rouges » … « nom Dupont ».</div>
     <div id="cmdlog" class="cmdlog"></div>
     <div class="btns">
+      <button id="classerAdia" style="flex-basis:100%;padding:14px;font:700 16px/1 sans-serif;color:#fff;background:#1a7a3a;border:none;border-radius:10px;cursor:pointer">📁 Classer dans le dossier du patient (ADIA)</button>
+      <div id="classerMsg" style="flex-basis:100%;font-size:13px;color:#1a7a3a;min-height:16px"></div>
       <button id="savefolder" style="display:none">💾 Enregistrer (Word) dans le dossier</button>
       <button id="pdffolder" style="display:none">📄 PDF dans le dossier</button>
       <button id="share">📤 Envoyer le PDF</button>
@@ -182,7 +184,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.5.1</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.6</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -597,7 +599,7 @@
     });
   }
   document.getElementById("prfAdd").addEventListener("click", function(){
-    var nom=(prompt("Nouvel élément PRF (ex. LPF, membranes, bouchons, tubes verts…) :","")||"").trim();
+    var nom=(prompt("Nouvel élément PRF (ex. L-PRF, membranes, bouchons, tubes verts…) :","")||"").trim();
     if(!nom) return;
     prfModel.push({id:"prfx_"+Date.now(), label:nom}); savePrf(); renderPrf();
   });
@@ -864,6 +866,47 @@
       live.textContent="Enregistrement impossible : "+((e&&e.message)||e);
     }
   }
+  // === Classer directement dans le dossier du patient via la passerelle ADIA ===
+  // La passerelle écrit le document dans docpatient/<n° dossier>/ (dossier réseau
+  // partagé). La secrétaire le retrouve ensuite dans la fiche du patient — aucun
+  // dossier à choisir à la main.
+  async function classerViaPasserelle(){
+    var m=document.getElementById("classerMsg");
+    function say(t,err){ if(m){ m.textContent=t; m.style.color=err?"#c0392b":"#1a7a3a"; } }
+    var elDos=document.getElementById("dossier");
+    var dossier=(elDos&&elDos.value||"").trim();
+    if(!dossier){ say("Renseignez d'abord le n° de dossier (bouton « Importer le patient (ADIA) » en haut).",true); return; }
+    var base="http://127.0.0.1:8765/classer-fiche", base2="http://localhost:8765/classer-fiche";
+    async function envoi(host, bytes, name, type){
+      var url=host+"?folder_id="+encodeURIComponent(dossier)+"&filename="+encodeURIComponent(name);
+      var r=await fetch(url,{method:"POST",headers:{"Content-Type":type},body:bytes});
+      if(!r.ok){ var e={}; try{ e=await r.json(); }catch(_){}
+        throw new Error(e.error||("Erreur passerelle (HTTP "+r.status+")")); }
+      return r.json();
+    }
+    async function envoiDouble(bytes,name,type){
+      try{ return await envoi(base,bytes,name,type); }
+      catch(e){ if(/Failed to fetch|NetworkError|load failed/i.test(String(e&&e.message||e))) return await envoi(base2,bytes,name,type); throw e; }
+    }
+    try{
+      say("Classement dans le dossier du patient…");
+      var docBlob=new Blob(["\ufeff"+buildDocHTML()],{type:"application/msword"});
+      await envoiDouble(docBlob, buildTitle()+".doc", "application/msword");
+      try{
+        var pdfBytes=buildPDF(drawFiche());
+        await envoiDouble(new Blob([pdfBytes],{type:"application/pdf"}), buildTitle()+".pdf", "application/pdf");
+      }catch(ep){ /* le Word suffit ; on n'échoue pas si le PDF pose problème */ }
+      say("✓ Classé dans le dossier du patient n° "+dossier+" (Word + PDF). La secrétaire le retrouvera dans la fiche du patient.");
+    }catch(e){
+      var msg=String(e&&e.message||e);
+      if(/Failed to fetch|NetworkError|load failed/i.test(msg))
+        say("Passerelle non trouvée. Lancez « ADIA - Passerelle logiciel » et cochez « Activer lien local ADIA », puis réessayez.",true);
+      else
+        say("Classement impossible : "+msg,true);
+    }
+  }
+  (function(){ var cb=document.getElementById("classerAdia"); if(cb) cb.addEventListener("click", classerViaPasserelle); })();
+
   if(window.showDirectoryPicker){
     document.getElementById("savefolder").style.display="";
     document.getElementById("savefolder").addEventListener("click", saveToFolder);
