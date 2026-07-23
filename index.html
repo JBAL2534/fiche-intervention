@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.0</title>
+<title>Fiche intervention – v4.1</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.0</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.1</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -1290,5 +1290,134 @@
 
 })();
 </script>
+<script id="adia-dictee-ia">
+(function(){
+  var SB_URL="https://gcnammzonyrhxhrmklrn.supabase.co";
+  var SB_KEY="sb_publishable_CHEfcDwVJfTMFTcnDLbGwQ_g99uoWim";
+  var TOK="fiche-adia-token";
+  function token(){ try{return localStorage.getItem(TOK)||"";}catch(e){return "";} }
+  function setToken(t){ try{localStorage.setItem(TOK,t||"");}catch(e){} }
+  function norm(s){ return (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+  function setMsg(t){ var el=document.getElementById("iaDicteeMsg"); if(el) el.textContent=t||""; }
+
+  async function login(){
+    return new Promise(function(resolve){
+      var ov=document.createElement("div");
+      ov.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center";
+      ov.innerHTML="<form style='background:#fff;padding:20px;border-radius:12px;min-width:280px;font-family:sans-serif'>"
+        +"<h3 style='margin:0 0 10px;color:#1a3e6f'>Connexion ADIA (une fois)</h3>"
+        +"<p style='font-size:13px;color:#555;margin:0 0 10px'>Votre compte ADIA Clinic, pour la dictee IA.</p>"
+        +"<input id='iaMail' type='email' placeholder='email' style='width:100%;padding:9px;margin:0 0 8px;border:1px solid #ccc;border-radius:8px'>"
+        +"<input id='iaPwd' type='password' placeholder='mot de passe' style='width:100%;padding:9px;margin:0 0 12px;border:1px solid #ccc;border-radius:8px'>"
+        +"<div style='display:flex;gap:8px'><button type='submit' style='flex:1;padding:10px;border:none;border-radius:8px;background:#1a3e6f;color:#fff;font-weight:600;cursor:pointer'>Se connecter</button>"
+        +"<button type='button' id='iaCancel' style='padding:10px;border:1px solid #ccc;border-radius:8px;background:#f4f6f9;cursor:pointer'>Annuler</button></div>"
+        +"<div id='iaErr' style='color:#b0243a;font-size:13px;margin-top:8px'></div></form>";
+      document.body.appendChild(ov);
+      ov.querySelector("#iaCancel").onclick=function(){ ov.remove(); resolve(false); };
+      ov.querySelector("form").onsubmit=async function(e){
+        e.preventDefault();
+        var email=ov.querySelector("#iaMail").value.trim(), pwd=ov.querySelector("#iaPwd").value;
+        ov.querySelector("#iaErr").textContent="Connexion...";
+        try{
+          var r=await fetch(SB_URL+"/auth/v1/token?grant_type=password",{method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},body:JSON.stringify({email:email,password:pwd})});
+          var d=await r.json();
+          if(!r.ok || !d.access_token) throw new Error(d.error_description||d.msg||"Identifiants refuses");
+          setToken(d.access_token); ov.remove(); resolve(true);
+        }catch(err){ ov.querySelector("#iaErr").textContent=(err.message||err); }
+      };
+    });
+  }
+
+  function matLabels(){
+    return [].slice.call(document.querySelectorAll("#matGroups label.chk")).map(function(l){
+      var cb=l.querySelector("input[type=checkbox]"); return {label:l.textContent.replace("✕","").trim(), cb:cb};
+    }).filter(function(x){return x.cb;});
+  }
+  async function extract(transcript){
+    var labels=matLabels().map(function(x){return x.label;});
+    var prompt="Tu remplis une fiche d'intervention de chirurgie dentaire a partir d'une dictee. "
+      +"Reponds UNIQUEMENT par un objet JSON, sans texte autour.\n\n"
+      +"Dictee : \""+transcript.replace(/"/g,"'")+"\"\n\n"
+      +"Elements de MATERIEL disponibles (tu ne peux cocher QUE ceux-ci, par leur libelle EXACT) :\n"+JSON.stringify(labels)+"\n\n"
+      +"Schema exact : {\"avulsion\":\"oui\"|\"non\"|null, \"prf_rouge\":<entier|null>, \"prf_blanc\":<entier|null>, \"materiel\":[<libelles EXACTS coches>], \"description\":\"<le geste operatoire dicte, phrase clinique>\"}\n"
+      +"Regles : n'invente rien. \"materiel\" ne contient QUE des libelles de la liste. Un produit dicte absent de la liste est ignore. Si une info n'est pas dictee, mets null (ou [] / '').";
+    var r=await fetch(SB_URL+"/functions/v1/generate-document",{method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY,"Authorization":"Bearer "+token()},body:JSON.stringify({prompt:prompt,consultationId:null,document:{document_type:"fiche_intervention_extraction",title:"Fiche intervention"}})});
+    var d=await r.json();
+    if(!r.ok) throw new Error(d.error||"Extraction impossible");
+    var txt=String(d.output_text||d.text||"");
+    var m=txt.indexOf("{"), n=txt.lastIndexOf("}");
+    return JSON.parse(txt.slice(m,n+1));
+  }
+  function applyExtraction(o){
+    function setVal(id,v){ var el=document.getElementById(id); if(el && v!=null){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); } }
+    function chk(id,v){ var el=document.getElementById(id); if(el){ el.checked=!!v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
+    if(o.description){ var d=document.getElementById("description"); if(d){ d.value=(d.value?d.value+"\n":"")+o.description; d.dispatchEvent(new Event("input",{bubbles:true})); } }
+    if(o.avulsion==="oui"){ chk("avul_oui",true); chk("avul_non",false); }
+    else if(o.avulsion==="non"){ chk("avul_non",true); chk("avul_oui",false); }
+    if(o.prf_rouge!=null){ setVal("prf_rouge_n",String(o.prf_rouge)); chk("prf_rouge", Number(o.prf_rouge)>0); }
+    if(o.prf_blanc!=null){ setVal("prf_blanc_n",String(o.prf_blanc)); chk("prf_blanc", Number(o.prf_blanc)>0); }
+    var checked=0;
+    if(Array.isArray(o.materiel)){
+      var items=matLabels();
+      o.materiel.forEach(function(lab){
+        var target=items.find(function(x){return norm(x.label)===norm(lab);}) || items.find(function(x){return norm(x.label).indexOf(norm(lab))>=0 || norm(lab).indexOf(norm(x.label))>=0;});
+        if(target){ target.cb.checked=true; target.cb.dispatchEvent(new Event("change",{bubbles:true})); checked++; }
+      });
+    }
+    return checked;
+  }
+
+  var rec=null, chunks=[], recording=false;
+  async function toggleRecord(btn){
+    if(recording){ rec && rec.stop(); return; }
+    if(!token()){ var ok=await login(); if(!ok) return; }
+    if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Micro non disponible (Chrome/Edge requis)."); return; }
+    var stream;
+    try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch(e){ setMsg("Micro refuse."); return; }
+    chunks=[]; rec=new MediaRecorder(stream);
+    rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=async function(){
+      stream.getTracks().forEach(function(t){t.stop();});
+      recording=false; btn.textContent="🎤 Dicter (IA)"; btn.style.background="#1a3e6f";
+      var blob=new Blob(chunks,{type: rec.mimeType||"audio/webm"});
+      if(blob.size<600){ setMsg("Enregistrement trop court."); return; }
+      try{
+        setMsg("Transcription...");
+        var form=new FormData(); form.append("file",blob,"dictee.webm");
+        var tr=await fetch(SB_URL+"/functions/v1/transcribe-audio",{method:"POST",headers:{"apikey":SB_KEY,"Authorization":"Bearer "+token()},body:form});
+        var td=await tr.json();
+        if(tr.status===401){ setToken(""); setMsg("Session expiree - reconnectez-vous."); return; }
+        if(!tr.ok || !td.text){ throw new Error(td.error||"Transcription vide"); }
+        setMsg("Analyse de la dictee...");
+        var o=await extract(td.text);
+        var n=applyExtraction(o);
+        setMsg("✓ Fiche remplie ("+n+" element(s) coche(s)). Transcription : « "+td.text.slice(0,80)+"... »");
+      }catch(err){ setMsg("Erreur : "+(err.message||err)); }
+    };
+    rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictee"; btn.style.background="#b0243a";
+    setMsg("Parlez naturellement : avulsion, implants, materiel, PRF...");
+  }
+
+  function addUI(){
+    if(document.getElementById("iaDicteeBtn")) return true;
+    var live=document.getElementById("live"); if(!live) return false;
+    var wrap=document.createElement("div"); wrap.style.cssText="margin:8px 0";
+    var b=document.createElement("button"); b.id="iaDicteeBtn"; b.type="button";
+    b.textContent="🎤 Dicter (IA)";
+    b.style.cssText="padding:12px 16px;font:700 15px/1 sans-serif;color:#fff;background:#1a3e6f;border:none;border-radius:10px;cursor:pointer";
+    b.title="Essai : dictee naturelle, l'IA remplit la fiche (connexion ADIA + internet)";
+    b.addEventListener("click", function(){ toggleRecord(b); });
+    var badge=document.createElement("span"); badge.textContent=" essai"; badge.style.cssText="font-size:11px;color:#888;margin-left:6px";
+    var msg=document.createElement("div"); msg.id="iaDicteeMsg"; msg.style.cssText="font-size:13px;color:#1a7a3a;margin-top:6px;min-height:16px";
+    wrap.appendChild(b); wrap.appendChild(badge); wrap.appendChild(msg);
+    live.parentNode.insertBefore(wrap, live.nextSibling);
+    return true;
+  }
+  var iv=setInterval(function(){ if(addUI()) clearInterval(iv); }, 400);
+  setTimeout(function(){ clearInterval(iv); }, 12000);
+})();
+</script>
+
 </body>
 </html>
