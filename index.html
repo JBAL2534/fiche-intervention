@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.5</title>
+<title>Fiche intervention – v4.5.1</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.5</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.5.1</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -518,8 +518,12 @@
   try{ implants=JSON.parse(localStorage.getItem(ISTORE)||"[]"); }catch(e){ implants=[]; }
   function saveImplants(){ try{ localStorage.setItem(ISTORE, JSON.stringify(implants)); }catch(e){} }
   var SYSKEY="fiche-systemes-v1";
-  var SYSTEMES=(function(){ try{ var a=JSON.parse(localStorage.getItem(SYSKEY)); if(a&&a.length) return a; }catch(e){} return ["NobelActive","NobelParallel","NA","Autre"]; })();
   function saveSystemes(){ try{ localStorage.setItem(SYSKEY, JSON.stringify(SYSTEMES)); }catch(e){} }
+  var SYSTEMES=(function(){
+    try{ var a=JSON.parse(localStorage.getItem(SYSKEY)); if(a&&a.length){ if(a.indexOf("TBR")<0){ var p=a.indexOf("Autre"); if(p<0)p=a.length; a.splice(p,0,"TBR"); } return a; } }catch(e){}
+    return ["NobelActive","NobelParallel","NA","TBR","Autre"];
+  })();
+  saveSystemes();   // persiste la liste (dont TBR ajouté aux listes déjà enregistrées)
   function renderImplants(){
     var box=document.getElementById("implantList"); box.innerHTML="";
     if(!implants.length){
@@ -593,7 +597,7 @@
     });
   }
   document.getElementById("prfAdd").addEventListener("click", function(){
-    var nom=(prompt("Nouvel élément PRF (ex. membranes A-PRF, bouchons, tubes verts…) :","")||"").trim();
+    var nom=(prompt("Nouvel élément PRF (ex. LPF, membranes, bouchons, tubes verts…) :","")||"").trim();
     if(!nom) return;
     prfModel.push({id:"prfx_"+Date.now(), label:nom}); savePrf(); renderPrf();
   });
