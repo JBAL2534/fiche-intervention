@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.4</title>
+<title>Fiche intervention – v4.5</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -158,7 +158,7 @@
       <button id="reset">↺ Réinitialiser</button>
     </div>
     <div id="changeFolderWrap" style="display:none; font-size:13px; margin-top:4px; color:#555">
-      Dossier de destination : <a href="#" id="changeFolder">choisir / changer</a>
+      📁 Enregistrer les documents dans : <a href="#" id="changeFolder">choisir le dossier du patient</a>
     </div>
     <details class="aide">
       <summary>Commandes vocales</summary>
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.4</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.5</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -215,6 +215,7 @@
     <div class="row addrow">
       <button id="impAddActive" type="button" class="addbtn">＋ Active</button>
       <button id="impAddParallel" type="button" class="addbtn alt">＋ Parallel</button>
+      <button id="impAddOther" type="button" class="addbtn">＋ Autre système…</button>
     </div>
   </section>
 
@@ -227,13 +228,10 @@
   <!-- 4 -->
   <section>
     <h2>4/ PRF</h2>
-    <div class="row">
-      <label class="chk"><input type="checkbox" id="prf_rouge"></label>
-      <input type="text" id="prf_rouge_n" class="qty" inputmode="numeric" placeholder="0"> tubes rouges
-    </div>
-    <div class="row">
-      <label class="chk"><input type="checkbox" id="prf_blanc"></label>
-      <input type="text" id="prf_blanc_n" class="qty" inputmode="numeric" placeholder="0"> tubes blancs
+    <div id="prfList"></div>
+    <div class="row addrow">
+      <button id="prfAdd" type="button" class="addbtn">＋ Élément PRF…</button>
+      <button id="prfEditBtn" type="button" class="addbtn alt">✎ Modifier / retirer</button>
     </div>
   </section>
 
@@ -519,7 +517,9 @@
   var implants=[];
   try{ implants=JSON.parse(localStorage.getItem(ISTORE)||"[]"); }catch(e){ implants=[]; }
   function saveImplants(){ try{ localStorage.setItem(ISTORE, JSON.stringify(implants)); }catch(e){} }
-  var SYSTEMES=["NobelActive","NobelParallel","NA","Autre"];
+  var SYSKEY="fiche-systemes-v1";
+  var SYSTEMES=(function(){ try{ var a=JSON.parse(localStorage.getItem(SYSKEY)); if(a&&a.length) return a; }catch(e){} return ["NobelActive","NobelParallel","NA","Autre"]; })();
+  function saveSystemes(){ try{ localStorage.setItem(SYSKEY, JSON.stringify(SYSTEMES)); }catch(e){} }
   function renderImplants(){
     var box=document.getElementById("implantList"); box.innerHTML="";
     if(!implants.length){
@@ -560,6 +560,46 @@
   renderImplants();
   document.getElementById("impAddActive").addEventListener("click", function(){ addImplant("NobelActive",""); });
   document.getElementById("impAddParallel").addEventListener("click", function(){ addImplant("NobelParallel",""); });
+  document.getElementById("impAddOther").addEventListener("click", function(){
+    var nom=(prompt("Nom du système d'implant à ajouter (ex. Straumann, BLX, Zimmer, Anthogyr…) :","")||"").trim();
+    if(!nom) return;
+    if(SYSTEMES.indexOf(nom)===-1){ var pos=SYSTEMES.indexOf("Autre"); if(pos<0) pos=SYSTEMES.length; SYSTEMES.splice(pos,0,nom); saveSystemes(); }
+    addImplant(nom,"");
+  });
+  // ---- 4/ PRF : liste modifiable (comme le Matériel) ----
+  var PRFKEY="fiche-prf-v1", prfEdit=false;
+  var prfModel=(function(){ try{ var a=JSON.parse(localStorage.getItem(PRFKEY)); if(a&&a.length) return a; }catch(e){} return [{id:"prf_rouge",label:"tubes rouges"},{id:"prf_blanc",label:"tubes blancs"}]; })();
+  function savePrf(){ try{ localStorage.setItem(PRFKEY, JSON.stringify(prfModel)); }catch(e){} }
+  function renderPrf(){
+    var box=document.getElementById("prfList"); if(!box) return;
+    var saved={}; try{ saved=JSON.parse(localStorage.getItem(STORE)||"{}"); }catch(e){}
+    prfModel.forEach(function(it){ var c=document.getElementById(it.id), q=document.getElementById(it.id+"_n"); if(c) saved[it.id]=c.checked; if(q) saved[it.id+"_n"]=q.value; });
+    box.innerHTML="";
+    prfModel.forEach(function(it,idx){
+      var row=document.createElement("div"); row.className="row";
+      var lab=document.createElement("label"); lab.className="chk";
+      var cb=document.createElement("input"); cb.type="checkbox"; cb.id=it.id; if(saved[it.id]) cb.checked=true;
+      lab.appendChild(cb);
+      var qty=document.createElement("input"); qty.type="text"; qty.className="qty"; qty.id=it.id+"_n"; qty.setAttribute("inputmode","numeric"); qty.placeholder="0"; if(saved[it.id+"_n"]!=null) qty.value=saved[it.id+"_n"];
+      row.appendChild(lab); row.appendChild(qty); row.appendChild(document.createTextNode(" "+it.label));
+      if(prfEdit){
+        var ren=document.createElement("button"); ren.type="button"; ren.className="del"; ren.textContent="✎"; ren.title="Renommer";
+        ren.addEventListener("click", function(ev){ ev.preventDefault(); var nv=(prompt("Nom de l'élément PRF :", it.label)||"").trim(); if(nv){ it.label=nv; savePrf(); renderPrf(); } });
+        var del=document.createElement("button"); del.type="button"; del.className="del"; del.textContent="✕"; del.title="Retirer";
+        del.addEventListener("click", function(ev){ ev.preventDefault(); prfModel.splice(idx,1); savePrf(); renderPrf(); });
+        row.appendChild(ren); row.appendChild(del);
+      }
+      box.appendChild(row);
+    });
+  }
+  document.getElementById("prfAdd").addEventListener("click", function(){
+    var nom=(prompt("Nouvel élément PRF (ex. membranes A-PRF, bouchons, tubes verts…) :","")||"").trim();
+    if(!nom) return;
+    prfModel.push({id:"prfx_"+Date.now(), label:nom}); savePrf(); renderPrf();
+  });
+  document.getElementById("prfEditBtn").addEventListener("click", function(){ prfEdit=!prfEdit; this.textContent=prfEdit?"✓ Terminer":"✎ Modifier / retirer"; renderPrf(); });
+  renderPrf();
+
 
   // ================= Génération PDF (pur JS, sans dépendance) =================
   function pad10(n){ n=""+n; while(n.length<10) n="0"+n; return n; }
@@ -706,8 +746,7 @@
     // ---- 4/ PRF ----
     section("4 / PRF");
     var prf=[];
-    if(chk("prf_rouge")) prf.push((val("prf_rouge_n")||"?")+" tubes rouges");
-    if(chk("prf_blanc")) prf.push((val("prf_blanc_n")||"?")+" tubes blancs");
+    prfModel.forEach(function(it){ if(chk(it.id)) prf.push((val(it.id+"_n")||"?")+" "+it.label); });
     T(ML+10,Y, prf.length?prf.join("           "):"-", "F1", 11); nl(15);
 
     // ---- Autres éléments ----
@@ -762,8 +801,8 @@
     if(!wrap || !link) return;
     wrap.style.display="";
     wrap.firstChild.nodeValue = dirHandle
-      ? "Dossier du patient : « "+(dirHandle.name||"choisi")+" »  "
-      : "Dossier du patient : ";
+      ? "📁 Enregistré dans : « "+(dirHandle.name||"choisi")+" »  "
+      : "📁 Enregistrer les documents dans : ";
     link.textContent = dirHandle ? "changer" : "choisir";
   }
   async function pickFolder(){
@@ -1222,7 +1261,7 @@
      +"<h3>2/ Implants</h3><table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse'><tr><th></th><th>Système</th><th>Dent</th><th>Ø × L / réf</th></tr>"+impRows+"</table>"
      +"<h3>3/ Matériel</h3>"
      +matWordHtml()
-     +"<h3>4/ PRF</h3><p>"+box(c("prf_rouge"),(v("prf_rouge_n")||"___")+" tubes rouges")+" &nbsp;&nbsp; "+box(c("prf_blanc"),(v("prf_blanc_n")||"___")+" tubes blancs")+"</p>"
+     +"<h3>4/ PRF</h3><p>"+prfModel.map(function(it){ return box(c(it.id),(v(it.id+"_n")||"___")+" "+it.label); }).join(" &nbsp;&nbsp; ")+"</p>"
      +(cust?"<h3>Autres éléments</h3><ul>"+cust+"</ul>":"")
      +"</body></html>";
   }
@@ -1385,7 +1424,19 @@
     // l'acces micro apres la fenetre de connexion) :
     var stream;
     try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-    catch(e){ setMsg("Acces au micro refuse. Cliquez sur l'icone camera/micro de la barre d'adresse et autorisez, puis reessayez.",true); return; }
+    catch(e){
+      var n=(e&&e.name)||"";
+      var m;
+      if(n==="NotFoundError"||n==="DevicesNotFoundError"||n==="OverconstrainedError")
+        m="Aucun micro détecté sur ce poste. Branchez un micro (casque ou micro USB) puis réessayez.";
+      else if(n==="NotAllowedError"||n==="SecurityError"||n==="PermissionDeniedError")
+        m="Micro bloqué. 1) Cliquez sur le 🔒/🎤 à gauche de l'adresse et autorisez le micro. 2) Windows : Paramètres › Confidentialité › Microphone › activez « autoriser les applications de bureau ».";
+      else if(n==="NotReadableError"||n==="TrackStartError")
+        m="Micro occupé par une autre application (Teams, Zoom, dictée…). Fermez-la puis réessayez.";
+      else
+        m="Micro indisponible ("+(n||"erreur inconnue")+"). Utilisez Chrome ou Edge et vérifiez qu'un micro est branché.";
+      setMsg(m,true); return;
+    }
     // Connexion si besoin :
     if(!token()){ var ok=await login(); if(!ok){ stream.getTracks().forEach(function(t){t.stop();}); return; } }
     chunks=[]; rec=new MediaRecorder(stream);
@@ -1442,6 +1493,8 @@
       if(page && btns){
         if(reset) bar.appendChild(reset);   // Réinitialiser -> haut
         page.appendChild(btns);             // Enregistrer / PDF / Imprimer -> bas
+        var cfw=document.getElementById("changeFolderWrap");
+        if(cfw) page.appendChild(cfw);      // indicateur « dossier d'enregistrement » -> juste sous les boutons
       }
     }catch(e){}
     return true;
