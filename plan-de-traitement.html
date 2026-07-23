@@ -50,6 +50,88 @@
   setTimeout(function(){ clearInterval(iv); }, 12000);
 })();
 </script>
+<script id="adia-classer">
+(function(){
+  // Classement du plan dans le dossier du patient : on intercepte l'export
+  // « Enregistrer » natif du plan (qui produit un .html complet et ré-ouvrable)
+  // et on l'envoie à la passerelle -> docpatient/<n° dossier>/. Aucun rendu à
+  // refaire : c'est l'export propre du plan lui-même. Repli en téléchargement
+  // si la passerelle est absente, pour ne jamais perdre le document.
+  function dossierNow(){
+    var dos=document.querySelector('input[placeholder="Julie"]');
+    var v=dos&&dos.value&&dos.value.trim(); if(v) return v;
+    try{ return (window.__ADIA_PATIENT__&&window.__ADIA_PATIENT__.patient_folder_id||'').trim(); }catch(e){ return ''; }
+  }
+  function nomNow(){ var n=document.querySelector('input[placeholder="Nom Prénom"]'); return (n&&n.value&&n.value.trim())||''; }
+  function toast(txt,err){
+    var t=document.getElementById('adia-toast');
+    if(!t){ t=document.createElement('div'); t.id='adia-toast';
+      t.style.cssText='position:fixed;left:16px;bottom:16px;z-index:100000;max-width:60vw;padding:12px 16px;font:600 14px/1.35 -apple-system,Segoe UI,Arial,sans-serif;color:#fff;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+      document.body.appendChild(t); }
+    t.textContent=txt; t.style.background=err?'#c0392b':'#1a7a3a'; t.style.display='block';
+    clearTimeout(t._h); t._h=setTimeout(function(){ t.style.display='none'; }, 5000);
+  }
+  function download(blob,name){
+    var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download=name;
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(u); a.remove(); }, 4000);
+  }
+  async function classerHtml(html){
+    var dossier=dossierNow(), nom=nomNow();
+    var safe=(nom||dossier||'plan').replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim();
+    var name='Plan de traitement'+(safe?' - '+safe:'')+'.html';
+    var blob=new Blob([html],{type:'text/html'});
+    if(!dossier){ download(blob,name); toast('Importez d’abord le patient (ADIA) — plan téléchargé, non classé.',true); return; }
+    var hosts=['http://127.0.0.1:8765/classer-fiche','http://localhost:8765/classer-fiche'];
+    async function envoi(h){ var url=h+'?folder_id='+encodeURIComponent(dossier)+'&filename='+encodeURIComponent(name);
+      var r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/html'},body:blob});
+      if(!r.ok){ var e={}; try{e=await r.json();}catch(_){}; throw new Error(e.error||('Erreur passerelle (HTTP '+r.status+')')); } return r.json(); }
+    try{ await envoi(hosts[0]); toast('✓ Plan classé dans le dossier du patient n° '+dossier+'.'); }
+    catch(e){ if(/Failed to fetch|NetworkError|load failed/i.test(String(e&&e.message||e))){
+        try{ await envoi(hosts[1]); toast('✓ Plan classé dans le dossier du patient n° '+dossier+'.'); return; }catch(_){}
+        download(blob,name); toast('Passerelle non trouvée — plan téléchargé. Lancez la passerelle pour le classer.',true);
+      } else { download(blob,name); toast('Classement refusé ('+String(e.message||e).slice(0,40)+') — plan téléchargé.',true); }
+    }
+  }
+  // Poignée factice : l'« Enregistrer » du plan écrit dedans, on récupère le HTML.
+  var fakeHandle={ kind:'file', name:'plan.html',
+    createWritable:function(){ var chunks=[];
+      return Promise.resolve({
+        write:function(d){ if(d&&typeof d==='object'&&'data'in d) d=d.data; chunks.push(d); return Promise.resolve(); },
+        truncate:function(){return Promise.resolve();}, seek:function(){return Promise.resolve();},
+        close:async function(){ var parts=[]; for(var i=0;i<chunks.length;i++){ var c=chunks[i];
+            parts.push(c instanceof Blob ? await c.text() : String(c)); } return classerHtml(parts.join('')); }
+      }); },
+    queryPermission:function(){return Promise.resolve('granted');}, requestPermission:function(){return Promise.resolve('granted');}
+  };
+  // On force l'« Enregistrer » à classer dans le dossier patient (au lieu d'ouvrir une fenêtre de fichier).
+  try{ Object.defineProperty(window,'showSaveFilePicker',{configurable:true,writable:true,value:function(){ return Promise.resolve(fakeHandle); }}); }
+  catch(e){ window.showSaveFilePicker=function(){ return Promise.resolve(fakeHandle); }; }
+
+  // Manifeste d'application (installable comme la fiche) + bouton « Classer » homogène.
+  function ensureAppLinks(){
+    if(!document.head) return;
+    if(!document.querySelector('link[rel="manifest"]')){ var l=document.createElement('link'); l.rel='manifest'; l.href='plan.webmanifest'; document.head.appendChild(l); }
+    if(!document.querySelector('meta[name="theme-color"]')){ var m=document.createElement('meta'); m.name='theme-color'; m.content='#173a63'; document.head.appendChild(m); }
+    if(!document.querySelector('link[rel="apple-touch-icon"]')){ var a=document.createElement('link'); a.rel='apple-touch-icon'; a.href='icon-192.png'; document.head.appendChild(a); }
+  }
+  function nativeSaveButton(){
+    var bs=[].slice.call(document.querySelectorAll('button'));
+    for(var i=0;i<bs.length;i++){ if(/^\s*Enregistrer\s*$/.test(bs[i].textContent||'')) return bs[i]; }
+    return null;
+  }
+  function addBtn(){
+    if(!document.body) return; ensureAppLinks();
+    if(document.getElementById('adia-classer-btn')) return;
+    var b=document.createElement('button'); b.id='adia-classer-btn'; b.type='button';
+    b.textContent='📁 Classer dans le dossier (ADIA)';
+    b.style.cssText='position:fixed;right:16px;bottom:70px;z-index:99999;padding:12px 16px;font:600 14px/1 -apple-system,Segoe UI,Arial,sans-serif;color:#fff;background:#1a7a3a;border:none;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.28);cursor:pointer';
+    b.addEventListener('click', function(){ var s=nativeSaveButton(); if(s){ s.click(); } else { toast('Bouton Enregistrer introuvable — réessayez dans un instant.',true); } });
+    document.body.appendChild(b);
+  }
+  var iv=setInterval(function(){ if(document.body) addBtn(); }, 500);
+  setTimeout(function(){ clearInterval(iv); }, 20000);
+})();
+</script>
 
   <meta charset="utf-8">
   <title>Bundled Page</title>
