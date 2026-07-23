@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.1</title>
+<title>Fiche intervention – v4.2</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -182,7 +182,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.1</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.2</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -1328,6 +1328,15 @@
     });
   }
 
+  function ficheGlossary(){
+    var mats=[];
+    try{ mats=matLabels().map(function(x){return x.label;}); }catch(e){}
+    var fixed=["implant","implant actif","implant parallèle","avulsion","implantation immédiate",
+      "PRF","tubes rouges","tubes blancs","BPRF","CPRI","exp","exposition","ALV","WYART",
+      "pilier provisoire","pins","contre-angle rouge","pièce à main","guide labo","forets Versah",
+      "Straumann","Nobel","comblement","membrane","empreinte","provisoire","cicatrisation"];
+    return fixed.concat(mats).join(", ");
+  }
   function matLabels(){
     return [].slice.call(document.querySelectorAll("#matGroups label.chk")).map(function(l){
       var cb=l.querySelector("input[type=checkbox]"); return {label:l.textContent.replace("✕","").trim(), cb:cb};
@@ -1384,7 +1393,9 @@
       if(blob.size<600){ setMsg("Enregistrement trop court."); return; }
       try{
         setMsg("Transcription...");
-        var form=new FormData(); form.append("file",blob,"dictee.webm");
+        var form=new FormData(); form.append("audio",blob,"dictee.webm");
+        form.append("glossary", ficheGlossary());
+        form.append("context", "Dictée opératoire télégraphique en implantologie : numéros de dents (ex. 14, 26, 36), abréviations (exp = exposition, BPRF, CPRI, ALV, WYART), systèmes d'implant (actif, parallèle). Restituer ces termes tels quels.");
         var tr=await fetch(SB_URL+"/functions/v1/transcribe-audio",{method:"POST",headers:{"apikey":SB_KEY,"Authorization":"Bearer "+token()},body:form});
         var td=await tr.json();
         if(tr.status===401){ setToken(""); setMsg("Session expiree - reconnectez-vous."); return; }
