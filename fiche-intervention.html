@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v5.3</title>
+<title>Fiche intervention – v5.4</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -208,7 +208,7 @@
 <div class="page">
   <div class="hdr">
     <div id="entete"></div>
-    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.3</span></div>
+    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.4</span></div>
   </div>
 
   <!-- Barre de dictée -->
@@ -290,9 +290,11 @@
     <h2>2/ Implants</h2>
     <div id="implantList"></div>
     <div class="row addrow">
-      <button id="impAddActive" type="button" class="addbtn">＋ Active</button>
-      <button id="impAddParallel" type="button" class="addbtn alt">＋ Parallel</button>
-      <button id="impAddOther" type="button" class="addbtn">＋ Autre système…</button>
+      <span id="sysBtns" style="display:contents"></span>
+    </div>
+    <div class="row addrow" id="sysEditRow" style="display:none">
+      <input type="text" id="sysNew" placeholder="+ nouveau système (ex. Straumann BLX)" style="flex:1 1 200px">
+      <button id="sysAdd" type="button" class="addbtn">Ajouter</button>
     </div>
   </section>
 
@@ -331,7 +333,7 @@
   // --- Sauvegarde auto locale (le téléphone garde le contenu) ---
   var STORE = "fiche-intervention-v1";
   function fields(){ return document.querySelectorAll("input, textarea"); }
-  function skip(el){ return !el.id || el.id==="customInput" || el.id==="vocabTa" || el.id==="alertNew"; }
+  function skip(el){ return !el.id || el.id==="customInput" || el.id==="vocabTa" || el.id==="alertNew" || el.id==="sysNew"; }
   function save(){
     var o={};
     fields().forEach(function(el){ if(skip(el)) return; o[el.id] = el.type==="checkbox"?el.checked:el.value; });
@@ -657,10 +659,10 @@
   var SYSKEY="fiche-systemes-v1";
   function saveSystemes(){ try{ localStorage.setItem(SYSKEY, JSON.stringify(SYSTEMES)); }catch(e){} }
   var SYSTEMES=(function(){
-    try{ var a=JSON.parse(localStorage.getItem(SYSKEY)); if(a&&a.length){ if(a.indexOf("TBR")<0){ var p=a.indexOf("Autre"); if(p<0)p=a.length; a.splice(p,0,"TBR"); } return a; } }catch(e){}
+    // Liste librement modifiable : on ne réinjecte JAMAIS un système retiré.
+    try{ var a=JSON.parse(localStorage.getItem(SYSKEY)); if(Array.isArray(a)) return a; }catch(e){}
     return ["NobelActive","NobelParallel","NA","TBR","Autre"];
   })();
-  saveSystemes();   // persiste la liste (dont TBR ajouté aux listes déjà enregistrées)
   function renderImplants(){
     var box=document.getElementById("implantList"); box.innerHTML="";
     if(!implants.length){
@@ -672,7 +674,9 @@
       var row=document.createElement("div"); row.className="implant-line";
       var num=document.createElement("span"); num.className="idx"; num.textContent=(idx+1)+".";
       var sel=document.createElement("select"); sel.className="impsys";
-      SYSTEMES.forEach(function(o){
+      var opts=SYSTEMES.slice();
+      if(it.sys && opts.indexOf(it.sys)===-1) opts.unshift(it.sys);   // système retiré de la liste : on ne perd pas la saisie
+      opts.forEach(function(o){
         var op=document.createElement("option"); op.value=o; op.textContent=o;
         if(o===it.sys) op.selected=true; sel.appendChild(op);
       });
@@ -699,14 +703,54 @@
     if(box.lastChild) flash(box.lastChild.querySelector("input"));
   }
   renderImplants();
-  document.getElementById("impAddActive").addEventListener("click", function(){ addImplant("NobelActive",""); });
-  document.getElementById("impAddParallel").addEventListener("click", function(){ addImplant("NobelParallel",""); });
-  document.getElementById("impAddOther").addEventListener("click", function(){
-    var nom=(prompt("Nom du système d'implant à ajouter (ex. Straumann, BLX, Zimmer, Anthogyr…) :","")||"").trim();
-    if(!nom) return;
-    if(SYSTEMES.indexOf(nom)===-1){ var pos=SYSTEMES.indexOf("Autre"); if(pos<0) pos=SYSTEMES.length; SYSTEMES.splice(pos,0,nom); saveSystemes(); }
-    addImplant(nom,"");
-  });
+  // ---- Systèmes d'implant : boutons pilotés par la liste, liste modifiable ----
+  var sysEdit=false;
+  function renderSysButtons(){
+    var box=document.getElementById("sysBtns"); if(!box) return;
+    box.innerHTML="";
+    if(!SYSTEMES.length && !sysEdit){
+      var vide=document.createElement("span"); vide.style.cssText="font-size:14px;color:#888;font-style:italic";
+      vide.textContent="Aucun système — cliquez « Modifier la liste » pour en ajouter.";
+      box.appendChild(vide);
+    }
+    SYSTEMES.forEach(function(sys, i){
+      if(sysEdit){
+        var chip=document.createElement("span"); chip.className="achip";
+        var t=document.createElement("span"); t.textContent=sys;
+        var x=document.createElement("button"); x.type="button"; x.className="ax"; x.textContent="✕"; x.title="Retirer ce système";
+        x.addEventListener("click", function(ev){ ev.preventDefault();
+          if(!confirm("Retirer le système « "+sys+" » de la liste ?")) return;
+          SYSTEMES.splice(i,1); saveSystemes(); renderSysButtons(); renderImplants(); });
+        chip.appendChild(t); chip.appendChild(x); box.appendChild(chip);
+      } else {
+        var b=document.createElement("button"); b.type="button"; b.className="addbtn"+(i%2?" alt":"");
+        b.textContent="＋ "+sys;
+        b.addEventListener("click", function(){ addImplant(sys,""); });
+        box.appendChild(b);
+      }
+    });
+    var tog=document.createElement("button"); tog.type="button"; tog.className="addbtn";
+    tog.style.cssText="background:#f4f6f9;color:#1a3e6f;border:1px solid #cbd2dc";
+    tog.textContent=sysEdit?"✓ Terminer":"✎ Modifier la liste";
+    tog.addEventListener("click", function(){
+      sysEdit=!sysEdit;
+      var row=document.getElementById("sysEditRow"); if(row) row.style.display=sysEdit?"":"none";
+      renderSysButtons();
+    });
+    box.appendChild(tog);
+  }
+  (function(){
+    function addSys(){
+      var inp=document.getElementById("sysNew"); var v=(inp&&inp.value||"").trim();
+      if(!v) return;
+      if(SYSTEMES.indexOf(v)===-1){ SYSTEMES.push(v); saveSystemes(); }
+      inp.value=""; renderSysButtons(); renderImplants();
+    }
+    var a=document.getElementById("sysAdd"); if(a) a.addEventListener("click", addSys);
+    var i=document.getElementById("sysNew");
+    if(i) i.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); addSys(); } });
+  })();
+  renderSysButtons();
   // ---- Alertes médicales : chips cliquables, liste modifiable ----
   var ALSTORE="fiche-alertes-v1";
   var AL_DEFAULT=[{id:"al_anticoag",label:"Anticoagulant"},{id:"al_biphos",label:"Bisphosphonates"},
@@ -1673,7 +1717,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v5.3)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v5.4)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
