@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v5.1</title>
+<title>Fiche intervention – v5.2</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -168,6 +168,17 @@
     .hdr #entete *{ color:#000 !important; }
     .hdr-title{ display:none !important; }
   }
+
+  /* ===== Harmonisation v5.2 : identité en grille, libellé AU-DESSUS (comme le plan) ===== */
+  .ident{ display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+  .ident .row{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; }
+  .ident .row > label{ flex:0 0 100%; margin:0 0 3px; font:700 11px/1.2 -apple-system,"Segoe UI",Arial,sans-serif;
+    text-transform:uppercase; letter-spacing:.08em; color:#6b7a90; min-width:0; }
+  .ident .row input[type=text]{ flex:1 1 150px; padding:12px 12px; font-size:16px; }
+  .ident .row input[type=text].sm{ flex:1 1 120px; }
+  .ident .row select{ padding:11px 10px; border-radius:10px; }
+  .ident .row:nth-child(1), .ident .row:nth-child(2){ grid-column:1 / -1; }   /* Patient ADIA + Correspondant pleine largeur */
+  @media(max-width:600px){ .ident{ grid-template-columns:1fr; } .ident .row{ grid-column:1 / -1 !important; } }
 </style>
 </head>
 <body>
@@ -175,7 +186,7 @@
 <div class="page">
   <div class="hdr">
     <div id="entete"></div>
-    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.1</span></div>
+    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.2</span></div>
   </div>
 
   <!-- Barre de dictée -->
@@ -1584,7 +1595,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v5.1)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v5.2)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
