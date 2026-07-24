@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v5.2</title>
+<title>Fiche intervention – v5.3</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -179,6 +179,28 @@
   .ident .row select{ padding:11px 10px; border-radius:10px; }
   .ident .row:nth-child(1), .ident .row:nth-child(2){ grid-column:1 / -1; }   /* Patient ADIA + Correspondant pleine largeur */
   @media(max-width:600px){ .ident{ grid-template-columns:1fr; } .ident .row{ grid-column:1 / -1 !important; } }
+
+  /* ===== v5.3 : alertes médicales (chips cliquables, comme le plan) ===== */
+  #alertList{ display:flex; flex-wrap:wrap; gap:8px; }
+  .achip{ display:inline-flex; align-items:center; gap:8px; padding:9px 13px; border:1.6px solid #cbd2dc;
+    border-radius:999px; background:#fff; cursor:pointer; font-size:14px; font-weight:700; color:#3a4a66;
+    letter-spacing:.02em; user-select:none; -webkit-tap-highlight-color:transparent;
+    transition:background .08s, border-color .08s, color .08s; }
+  .achip:active{ transform:scale(.98); }
+  .achip input[type=checkbox]{ display:none; }
+  .achip:has(input:checked){ border-color:#d40000; background:#fdeaea; color:#9a1b2c; }
+  .achip .ax{ border:none; background:transparent; color:#b0243a; font-size:12px; line-height:1;
+    cursor:pointer; padding:0; opacity:.5; }
+  .achip .ax:hover{ opacity:1; }
+  #alertNew{ padding:10px 12px; }
+  @media print{
+    #alertList{ gap:6px; }
+    .achip{ border:1px solid #999 !important; background:none !important; padding:2px 8px !important; font-weight:normal !important; }
+    .achip:has(input:checked){ color:#d40000 !important; border-color:#d40000 !important; font-weight:700 !important;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .achip .ax{ display:none !important; }
+    .addrow{ display:none !important; }
+  }
 </style>
 </head>
 <body>
@@ -186,7 +208,7 @@
 <div class="page">
   <div class="hdr">
     <div id="entete"></div>
-    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.2</span></div>
+    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.3</span></div>
   </div>
 
   <!-- Barre de dictée -->
@@ -238,6 +260,16 @@
     <div class="row"><label>N° DOSSIER</label><input type="text" id="dossier" class="sm" autocomplete="off"></div>
     <div class="row"><label>DATE interv.</label><input type="text" id="date" placeholder="ex : mardi 07/07/2026" autocomplete="off"><input type="date" id="datePick" title="Choisir dans le calendrier" style="flex:0 0 auto;max-width:170px"></div>
   </div>
+
+  <!-- Alertes médicales -->
+  <section>
+    <h2>⚠️ Alertes médicales <span style="font-weight:normal;text-transform:none;letter-spacing:0;color:#6b7a90;font-size:12px">— cliquez pour activer</span></h2>
+    <div id="alertList"></div>
+    <div class="row addrow" style="margin-top:10px">
+      <input type="text" id="alertNew" placeholder="+ nouvelle alerte" style="flex:1 1 180px">
+      <button id="alertAdd" type="button" class="addbtn">Ajouter</button>
+    </div>
+  </section>
 
   <!-- Description de l'intervention -->
   <section>
@@ -299,7 +331,7 @@
   // --- Sauvegarde auto locale (le téléphone garde le contenu) ---
   var STORE = "fiche-intervention-v1";
   function fields(){ return document.querySelectorAll("input, textarea"); }
-  function skip(el){ return !el.id || el.id==="customInput" || el.id==="vocabTa"; }
+  function skip(el){ return !el.id || el.id==="customInput" || el.id==="vocabTa" || el.id==="alertNew"; }
   function save(){
     var o={};
     fields().forEach(function(el){ if(skip(el)) return; o[el.id] = el.type==="checkbox"?el.checked:el.value; });
@@ -675,6 +707,41 @@
     if(SYSTEMES.indexOf(nom)===-1){ var pos=SYSTEMES.indexOf("Autre"); if(pos<0) pos=SYSTEMES.length; SYSTEMES.splice(pos,0,nom); saveSystemes(); }
     addImplant(nom,"");
   });
+  // ---- Alertes médicales : chips cliquables, liste modifiable ----
+  var ALSTORE="fiche-alertes-v1";
+  var AL_DEFAULT=[{id:"al_anticoag",label:"Anticoagulant"},{id:"al_biphos",label:"Bisphosphonates"},
+    {id:"al_diabete",label:"Diabète"},{id:"al_tabac",label:"Tabac"},{id:"al_atb",label:"Allergie ATB"},
+    {id:"al_latex",label:"Latex"},{id:"al_cardio",label:"Cardiopathie"},{id:"al_immuno",label:"Immunodépression"}];
+  var alertModel=null;
+  try{ alertModel=JSON.parse(localStorage.getItem(ALSTORE)); }catch(e){}
+  if(!alertModel || !alertModel.length) alertModel=JSON.parse(JSON.stringify(AL_DEFAULT));
+  function saveAlerts(){ try{ localStorage.setItem(ALSTORE, JSON.stringify(alertModel)); }catch(e){} }
+  function renderAlerts(){
+    var box=document.getElementById("alertList"); if(!box) return;
+    var saved={}; try{ saved=JSON.parse(localStorage.getItem(STORE)||"{}"); }catch(e){}
+    alertModel.forEach(function(it){ var c=document.getElementById(it.id); if(c) saved[it.id]=c.checked; });
+    box.innerHTML="";
+    alertModel.forEach(function(it,idx){
+      var chip=document.createElement("label"); chip.className="achip";
+      var cb=document.createElement("input"); cb.type="checkbox"; cb.id=it.id; if(saved[it.id]) cb.checked=true;
+      var txt=document.createElement("span"); txt.textContent=it.label;
+      var del=document.createElement("button"); del.type="button"; del.className="ax"; del.textContent="✕"; del.title="Retirer de la liste";
+      del.addEventListener("click", function(ev){ ev.preventDefault(); ev.stopPropagation();
+        if(!confirm("Retirer l'alerte « "+it.label+" » de la liste ?")) return;
+        alertModel.splice(idx,1); saveAlerts(); renderAlerts(); if(typeof save==="function") save(); });
+      chip.appendChild(cb); chip.appendChild(txt); chip.appendChild(del);
+      box.appendChild(chip);
+    });
+  }
+  (function(){
+    var add=document.getElementById("alertAdd"), inp=document.getElementById("alertNew");
+    function doAdd(){ var v=(inp&&inp.value||"").trim(); if(!v) return;
+      alertModel.push({id:"alx_"+Date.now(), label:v}); saveAlerts(); renderAlerts(); inp.value=""; }
+    if(add) add.addEventListener("click", doAdd);
+    if(inp) inp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); doAdd(); } });
+  })();
+  renderAlerts();
+
   // ---- 4/ PRF : liste modifiable (comme le Matériel) ----
   var PRFKEY="fiche-prf-v1", prfEdit=false;
   var prfModel=(function(){ try{ var a=JSON.parse(localStorage.getItem(PRFKEY)); if(a&&a.length) return a; }catch(e){} return [{id:"prf_rouge",label:"tubes rouges"},{id:"prf_blanc",label:"tubes blancs"}]; })();
@@ -831,6 +898,15 @@
     T(ML+12, iy, "Patient",      "F2", 9.5, NAVY); T(ML+12, iy-13, val("nom")+" "+val("prenom"), "F1", 12);
     T(C2,    iy, "N° dossier",   "F2", 9.5, NAVY); T(C2,    iy-13, (val("dossier")||"-"),          "F1", 12);
     nl(idH-4);
+
+    // ---- Alertes médicales (en rouge, bien visibles) ----
+    var _al=alertModel.filter(function(it){ return chk(it.id); }).map(function(it){ return it.label; });
+    if(_al.length){
+      var RED="0.83 0.10 0.10";
+      T(ML, Y, "ALERTES", "F2", 9, RED);
+      T(ML+56, Y, _al.join("   •   "), "F2", 10.5, RED);
+      nl(18);
+    }
     T(ML+12, Y, "Correspondant", "F2", 9.5, NAVY); T(ML+12+92, Y-0, val("correspondant")||"-", "F1", 11);
     T(C2,    Y, "Date",          "F2", 9.5, NAVY); T(C2+38,    Y-0, val("date")||"-",           "F1", 11);
     nl(24);
@@ -1431,6 +1507,8 @@
      +"<p><b>Correspondant :</b> "+line(v("correspondant"))+"<br><b>NOM :</b> "+line(v("nom"))
      +"<br><b>Prénom :</b> "+line(v("prenom"))+"<br><b>N° dossier :</b> "+line(v("dossier"))
      +"<br><b>Date intervention :</b> "+line(v("date"))+"</p>"
+     +(function(){ var a=alertModel.filter(function(it){ return c(it.id); }).map(function(it){ return esc(it.label); });
+        return a.length ? "<p style='color:#d40000;font-weight:bold'>&#9888; Alertes médicales : "+a.join(" &nbsp;•&nbsp; ")+"</p>" : ""; })()
      +"<h3>Intervention</h3><p>"+(desc?esc(desc).replace(/\n/g,"<br>"):"________________________________________________<br>________________________________________________")+"</p>"
      +"<h3>1/ Avulsion – implantation immédiate</h3><p>"+box(c("avul_oui"),"oui")+" &nbsp;&nbsp; "+box(c("avul_non"),"non")+"</p>"
      +"<h3>2/ Implants</h3><table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse'><tr><th></th><th>Système</th><th>Dent</th><th>Ø × L / réf</th></tr>"+impRows+"</table>"
@@ -1595,7 +1673,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v5.2)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v5.3)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
