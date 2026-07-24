@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.8</title>
+<title>Fiche intervention – v4.9</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -184,7 +184,8 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.8</span></h1>
+  <div id="entete" style="text-align:center;margin:14px 0 2px"></div>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.9</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -272,6 +273,40 @@
     }catch(e){}
   }
   load();  // restaure la saisie précédente au chargement
+
+  // ===== En-tête personnalisable (cabinet / dentiste / spécialité), partagé avec le plan =====
+  var ENTETE_KEY="adia-entete-v1";
+  function getEntete(){ try{ var v=JSON.parse(localStorage.getItem(ENTETE_KEY)); if(v&&(v.cabinet||v.dentiste||v.specialite)) return {cabinet:v.cabinet||"",dentiste:v.dentiste||"",specialite:v.specialite||""}; }catch(e){} return {cabinet:"La Clé du Sourire", dentiste:"Dr Jacques BITTON", specialite:""}; }
+  function saveEntete(v){ try{ localStorage.setItem(ENTETE_KEY, JSON.stringify(v)); }catch(e){} }
+  function renderEntete(){
+    var e=getEntete(), el=document.getElementById("entete"); if(!el) return;
+    el.textContent="";
+    var d1=document.createElement("div"); d1.style.cssText="font-weight:800;font-size:16px;color:#173a63"; d1.textContent=e.dentiste||"";
+    var d2=document.createElement("div"); d2.style.cssText="font-size:13px;color:#555"; d2.textContent=(e.cabinet||"")+(e.specialite?(" · "+e.specialite):"");
+    var a=document.createElement("a"); a.href="#"; a.style.cssText="font-size:12px;color:#0b57d0;text-decoration:none"; a.textContent="⚙ Modifier l'en-tête";
+    a.onclick=function(ev){ ev.preventDefault(); editEntete(); };
+    if(d1.textContent) el.appendChild(d1); if(d2.textContent.trim()) el.appendChild(d2); el.appendChild(a);
+  }
+  function editEntete(){
+    var e=getEntete();
+    var ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px";
+    ov.innerHTML="<form style='background:#fff;padding:20px;border-radius:12px;min-width:300px;max-width:360px;font-family:sans-serif'>"
+      +"<h3 style='margin:0 0 10px;color:#173a63'>En-tête du cabinet</h3>"
+      +"<label style='font-size:12px;color:#555'>Nom du dentiste</label><input id='enD' style='width:100%;padding:9px;margin:2px 0 8px;border:1px solid #ccc;border-radius:8px'>"
+      +"<label style='font-size:12px;color:#555'>Nom du cabinet</label><input id='enC' style='width:100%;padding:9px;margin:2px 0 8px;border:1px solid #ccc;border-radius:8px'>"
+      +"<label style='font-size:12px;color:#555'>Spécialité</label><input id='enS' placeholder='ex : Chirurgie implantaire' style='width:100%;padding:9px;margin:2px 0 12px;border:1px solid #ccc;border-radius:8px'>"
+      +"<div style='display:flex;gap:8px'><button type='submit' style='flex:1;padding:10px;border:none;border-radius:8px;background:#173a63;color:#fff;font-weight:600;cursor:pointer'>Enregistrer</button>"
+      +"<button type='button' id='enX' style='padding:10px;border:1px solid #ccc;border-radius:8px;background:#f4f6f9;cursor:pointer'>Annuler</button></div></form>";
+    document.body.appendChild(ov);
+    ov.querySelector("#enD").value=e.dentiste||""; ov.querySelector("#enC").value=e.cabinet||""; ov.querySelector("#enS").value=e.specialite||"";
+    ov.querySelector("#enX").onclick=function(){ ov.remove(); };
+    ov.querySelector("form").onsubmit=function(ev){ ev.preventDefault();
+      saveEntete({dentiste:ov.querySelector("#enD").value.trim(), cabinet:ov.querySelector("#enC").value.trim(), specialite:ov.querySelector("#enS").value.trim()});
+      ov.remove(); renderEntete();
+    };
+  }
+  renderEntete();
 
   // --- Pré-remplissage depuis la passerelle ADIA -----------------------
   // La passerelle injecte window.__ADIA_PATIENT__ = {patient_label,
@@ -699,9 +734,12 @@
 
     // ---- En-tête praticien (papier à en-tête) ----
     Y = H-80;
-    T(ML, Y, "Dr Jacques BITTON", "F2", 11.5, NAVY);
-    T(ML, Y-13, "SELARL La Clé du Sourire", "F4", 9.5, GREY);
-    nl(32);
+    var _ent=getEntete();
+    T(ML, Y, _ent.dentiste||"", "F2", 11.5, NAVY);
+    T(ML, Y-13, _ent.cabinet||"", "F4", 9.5, GREY);
+    var _eo=32;
+    if(_ent.specialite){ T(ML, Y-24, _ent.specialite, "F4", 9, GREY); _eo=42; }
+    nl(_eo);
 
     // ---- Identité (panneau clair arrondi, 2 colonnes) ----
     var C2=320, idH=52;
@@ -767,7 +805,7 @@
     var foot=[val("nom")+" "+val("prenom"), val("dossier")?("dossier "+val("dossier")):"", val("date")]
       .filter(Boolean).join("    -    ");
     T(ML, 42, foot||"Fiche de preparation d'intervention", "F4", 8.5, GREY);
-    var mark="La Clé du Sourire";
+    var mark=getEntete().cabinet||"";
     T(MR-estW(mark,8.5,4), 42, mark, "F4", 8.5, GREY);
 
     return ops;
@@ -1299,6 +1337,7 @@
     var desc = v("description");
     return "<html xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'><title>"+esc(buildTitle())+"</title></head>"
      +"<body style='font-family:Arial; font-size:11pt'>"
+     +(function(){ var e=getEntete(); return "<div style='text-align:center'><b style='font-size:14pt'>"+esc(e.dentiste||"")+"</b>"+(e.cabinet?"<br>"+esc(e.cabinet):"")+(e.specialite?"<br><span style='font-size:9pt;color:#555'>"+esc(e.specialite)+"</span>":"")+"</div>"; })()
      +"<h1 style='text-align:center; font-style:italic'>FICHE INTERVENTION</h1>"
      +"<p><b>Correspondant :</b> "+line(v("correspondant"))+"<br><b>NOM :</b> "+line(v("nom"))
      +"<br><b>Prénom :</b> "+line(v("prenom"))+"<br><b>N° dossier :</b> "+line(v("dossier"))
@@ -1467,7 +1506,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v4.8)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v4.9)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
