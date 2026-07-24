@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v5.0</title>
+<title>Fiche intervention – v5.1</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -138,11 +138,45 @@
     .chk input[type=checkbox]:checked::after{color:#d40000; font-size:18px;
       -webkit-print-color-adjust:exact; print-color-adjust:exact}
   }
+
+  /* ===== Refonte visuelle v5.1 : aspect « carte » comme le plan de traitement ===== */
+  body{ background:#eef1f5; }
+  .page{ max-width:900px; margin:22px auto 46px; background:#fff; border-radius:18px;
+    box-shadow:0 12px 34px rgba(20,40,80,.12); padding:0; overflow:hidden; }
+  .page > *:not(.hdr){ padding-left:26px; padding-right:26px; }
+  .hdr{ background:linear-gradient(160deg,#22528f,#173a63); color:#fff; display:flex;
+    align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; padding:20px 26px; }
+  .hdr #entete{ text-align:left; margin:0; flex:1 1 260px; }
+  .hdr-title{ font:800 14px/1.2 -apple-system,"Segoe UI",Arial,sans-serif; letter-spacing:.16em;
+    text-transform:uppercase; color:#cfe2f6; text-align:right; }
+  .hdr-title #appver{ display:block; margin-top:3px; font-size:11px; letter-spacing:.06em; color:#9db8db; font-weight:600; }
+  .ident{ background:#f7f9fc; border:1px solid #e4e9f2; border-radius:14px; padding:14px 16px; margin:16px 0; }
+  .ident .row label{ color:#3a4a66; }
+  section{ border-top:1px solid #e7ebf2; padding:16px 0; }
+  section > h2{ color:#173a63; font-size:15px; letter-spacing:.05em; }
+  input[type=text], textarea, select, input[type=date]{ border:1px solid #d3dae6; border-radius:10px; background:#fff; }
+  input[type=text]:focus, textarea:focus, select:focus, input[type=date]:focus{
+    outline:none; border-color:#2a5aa0; box-shadow:0 0 0 3px rgba(42,90,160,.15); }
+  .btns{ gap:10px; margin-top:14px; }
+  .btns button{ border-radius:10px; }
+  #classerAdia{ box-shadow:0 4px 12px rgba(26,122,58,.22); }
+  #iaDicteeBtn{ box-shadow:0 4px 14px rgba(26,62,111,.22); }
+  @media print{
+    body{ background:#fff; }
+    .page{ box-shadow:none; border-radius:0; }
+    .hdr{ background:#fff !important; color:#000 !important; padding:0 0 6px !important; border-bottom:2px solid #000; }
+    .hdr #entete *{ color:#000 !important; }
+    .hdr-title{ display:none !important; }
+  }
 </style>
 </head>
 <body>
 <button id="micFab" class="micfab" title="Dictée" aria-label="Démarrer/arrêter la dictée">🎤</button>
 <div class="page">
+  <div class="hdr">
+    <div id="entete"></div>
+    <div class="hdr-title">Fiche d'intervention<span id="appver">v5.1</span></div>
+  </div>
 
   <!-- Barre de dictée -->
   <div class="bar">
@@ -183,9 +217,6 @@
     </details>
     <div id="warn" class="warn" style="display:none"></div>
   </div>
-
-  <div id="entete" style="text-align:center;margin:14px 0 2px"></div>
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v5.0</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -281,15 +312,15 @@
   function renderEntete(){
     var e=getEntete(), el=document.getElementById("entete"); if(!el) return;
     el.textContent="";
-    if(e.logo){ var img=document.createElement("img"); img.src=e.logo; img.alt="logo"; img.style.cssText="max-height:54px;max-width:200px;display:block;margin:0 auto 4px"; el.appendChild(img); }
-    var d1=document.createElement("div"); d1.style.cssText="font-weight:800;font-size:16px;color:#173a63"; d1.textContent=e.dentiste||"";
-    var d2=document.createElement("div"); d2.style.cssText="font-size:13px;color:#555"; d2.textContent=(e.cabinet||"")+(e.specialite?(" · "+e.specialite):"");
+    if(e.logo){ var img=document.createElement("img"); img.src=e.logo; img.alt="logo"; img.style.cssText="max-height:56px;max-width:200px;display:block;margin:0 0 6px;background:#fff;border-radius:6px;padding:3px"; el.appendChild(img); }
+    var d1=document.createElement("div"); d1.style.cssText="font-weight:800;font-size:19px;color:#fff;letter-spacing:.01em"; d1.textContent=e.dentiste||"";
+    var d2=document.createElement("div"); d2.style.cssText="font-size:13px;color:#cfe2f6;font-weight:600"; d2.textContent=(e.cabinet||"")+(e.specialite?(" · "+e.specialite):"");
     if(d1.textContent) el.appendChild(d1); if(d2.textContent.trim()) el.appendChild(d2);
     var coord=[]; if(e.adresse) coord.push(e.adresse);
     var te=[]; if(e.telephone) te.push("Tél. "+e.telephone); if(e.email) te.push(e.email);
     if(te.length) coord.push(te.join("  ·  "));
-    coord.forEach(function(line){ var d=document.createElement("div"); d.style.cssText="font-size:12px;color:#666"; d.textContent=line; el.appendChild(d); });
-    var a=document.createElement("a"); a.href="#"; a.style.cssText="font-size:12px;color:#0b57d0;text-decoration:none;display:inline-block;margin-top:2px"; a.textContent="⚙ Modifier l'en-tête";
+    coord.forEach(function(line){ var d=document.createElement("div"); d.style.cssText="font-size:12px;color:#bcd4ef"; d.textContent=line; el.appendChild(d); });
+    var a=document.createElement("a"); a.href="#"; a.style.cssText="font-size:12px;color:#cfe2f6;text-decoration:underline;display:inline-block;margin-top:4px"; a.textContent="⚙ Modifier l'en-tête";
     a.onclick=function(ev){ ev.preventDefault(); editEntete(); };
     el.appendChild(a);
   }
@@ -1553,7 +1584,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v5.0)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v5.1)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
