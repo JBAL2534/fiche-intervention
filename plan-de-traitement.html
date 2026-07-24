@@ -114,7 +114,7 @@
     if(!document.querySelector('meta[name="theme-color"]')){ var m=document.createElement('meta'); m.name='theme-color'; m.content='#173a63'; document.head.appendChild(m); }
     if(!document.querySelector('link[rel="apple-touch-icon"]')){ var a=document.createElement('link'); a.rel='apple-touch-icon'; a.href='icon-192.png'; document.head.appendChild(a); }
   }
-  var PLAN_ADIA_VERSION="v1.2 · 24/07/2026";
+  var PLAN_ADIA_VERSION="v1.3 · 24/07/2026";
   function ensureBadge(){
     if(!document.body) return;
     var v=document.getElementById('adia-plan-ver');
@@ -139,6 +139,36 @@
     sc.textContent=want;
     try{ window.__ADIA_ENTETE__=e; }catch(_){}
   }
+  function findDentisteSpan(e){
+    var sp=document.querySelectorAll('span');
+    for(var i=0;i<sp.length;i++){ var t=(sp[i].textContent||'').trim(); if(t===ORIG.dentiste || (e&&e.dentiste&&t===e.dentiste)) return sp[i]; }
+    return null;
+  }
+  function injectLogoCoord(e){
+    try{
+      var ds=findDentisteSpan(e); if(!ds) return;
+      var baseline=ds.parentElement; var textCol=baseline&&baseline.parentElement; var headerRow=textCol&&textCol.parentElement;
+      if(!textCol || !headerRow) return;
+      // logo (à gauche du bloc texte)
+      var lg=document.getElementById('adia-hdr-logo');
+      if(e.logo){
+        if(!lg){ lg=document.createElement('img'); lg.id='adia-hdr-logo'; lg.alt='logo'; lg.style.cssText='max-height:46px;max-width:120px;margin-right:14px;border-radius:6px;background:#fff;padding:2px;flex:0 0 auto'; }
+        if(lg.getAttribute('src')!==e.logo) lg.setAttribute('src', e.logo);
+        if(lg.parentElement!==headerRow || headerRow.firstChild!==lg) headerRow.insertBefore(lg, headerRow.firstChild);
+      } else if(lg){ lg.remove(); }
+      // coordonnées (sous le nom)
+      var lines=[]; if(e.adresse) lines.push(e.adresse);
+      var te=[]; if(e.telephone) te.push('Tél. '+e.telephone); if(e.email) te.push(e.email);
+      if(te.length) lines.push(te.join('  ·  '));
+      var co=document.getElementById('adia-hdr-coord');
+      if(lines.length){
+        if(!co){ co=document.createElement('div'); co.id='adia-hdr-coord'; co.style.cssText='color:#cfe2f6;font-size:11px;font-weight:500;margin-top:3px'; }
+        var want=lines.join('   —   ');
+        if(co.textContent!==want) co.textContent=want;
+        if(co.parentElement!==textCol) textCol.appendChild(co);
+      } else if(co){ co.remove(); }
+    }catch(_e){}
+  }
   function patchEntete(){
     var e=getEntete(); if(!e) return;
     [].forEach.call(document.querySelectorAll('span'), function(sp){
@@ -148,6 +178,7 @@
       else if(t===ORIG.cabinet){ if(e.cabinet && e.cabinet!==t) sp.textContent=e.cabinet; }
       else if(t===ORIG.specialite){ if((e.specialite||"")!==t) sp.textContent=(e.specialite||""); }
     });
+    injectLogoCoord(e);
     bakeEntete(e);
   }
   var _enteteIv;
@@ -159,23 +190,43 @@
   }
   function editEntete(){
     var e=getEntete()||{dentiste:ORIG.dentiste,cabinet:ORIG.cabinet,specialite:ORIG.specialite};
+    var pend={logo:e.logo||"", logoW:e.logoW||0, logoH:e.logoH||0};
     var ov=document.createElement("div");
-    ov.style.cssText="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px";
-    ov.innerHTML="<form style='background:#fff;padding:20px;border-radius:12px;min-width:300px;max-width:360px;font-family:-apple-system,Segoe UI,Arial,sans-serif'>"
+    ov.style.cssText="position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto";
+    var inp="width:100%;padding:9px;margin:2px 0 8px;border:1px solid #ccc;border-radius:8px";
+    var lab="font-size:12px;color:#555";
+    ov.innerHTML="<form style='background:#fff;padding:20px;border-radius:12px;min-width:300px;max-width:380px;max-height:92vh;overflow:auto;font-family:-apple-system,Segoe UI,Arial,sans-serif'>"
       +"<h3 style='margin:0 0 10px;color:#173a63'>En-tête du cabinet</h3>"
-      +"<label style='font-size:12px;color:#555'>Nom du dentiste</label><input id='enD' style='width:100%;padding:9px;margin:2px 0 8px;border:1px solid #ccc;border-radius:8px'>"
-      +"<label style='font-size:12px;color:#555'>Nom du cabinet</label><input id='enC' style='width:100%;padding:9px;margin:2px 0 8px;border:1px solid #ccc;border-radius:8px'>"
-      +"<label style='font-size:12px;color:#555'>Spécialité</label><input id='enS' placeholder='ex : Chirurgie implantaire' style='width:100%;padding:9px;margin:2px 0 12px;border:1px solid #ccc;border-radius:8px'>"
+      +"<label style='"+lab+"'>Nom du dentiste</label><input id='enD' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Nom du cabinet</label><input id='enC' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Spécialité</label><input id='enS' placeholder='ex : Chirurgie implantaire' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Adresse</label><input id='enA' placeholder='12 rue… 75000 Ville' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Téléphone</label><input id='enT' placeholder='01 23 45 67 89' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Email</label><input id='enM' placeholder='cabinet@exemple.fr' style='"+inp+"'>"
+      +"<label style='"+lab+"'>Logo</label><div style='display:flex;align-items:center;gap:10px;margin:2px 0 12px'><img id='enLp' style='max-height:46px;max-width:120px;border:1px solid #eee;border-radius:6px;display:none'><input id='enL' type='file' accept='image/*' style='flex:1;font-size:12px'><button type='button' id='enLrm' style='padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#f4f6f9;cursor:pointer;font-size:12px'>retirer</button></div>"
       +"<div style='display:flex;gap:8px'><button type='submit' style='flex:1;padding:10px;border:none;border-radius:8px;background:#173a63;color:#fff;font-weight:600;cursor:pointer'>Enregistrer</button>"
       +"<button type='button' id='enX' style='padding:10px;border:1px solid #ccc;border-radius:8px;background:#f4f6f9;cursor:pointer'>Annuler</button></div></form>";
     document.body.appendChild(ov);
-    ov.querySelector("#enD").value=e.dentiste||""; ov.querySelector("#enC").value=e.cabinet||""; ov.querySelector("#enS").value=e.specialite||"";
-    ov.querySelector("#enX").onclick=function(){ ov.remove(); };
-    ov.querySelector("form").onsubmit=function(ev){ ev.preventDefault();
-      var val={dentiste:ov.querySelector("#enD").value.trim(), cabinet:ov.querySelector("#enC").value.trim(), specialite:ov.querySelector("#enS").value.trim()};
+    var q=function(id){ return ov.querySelector(id); };
+    q("#enD").value=e.dentiste||""; q("#enC").value=e.cabinet||""; q("#enS").value=e.specialite||"";
+    q("#enA").value=e.adresse||""; q("#enT").value=e.telephone||""; q("#enM").value=e.email||"";
+    var prev=q("#enLp"); if(pend.logo){ prev.src=pend.logo; prev.style.display=""; }
+    q("#enL").onchange=function(){ var f=this.files&&this.files[0]; if(!f) return;
+      var rd=new FileReader(); rd.onload=function(){ var im=new Image(); im.onload=function(){
+        var max=400, sc=Math.min(1, max/Math.max(im.width,im.height)); var w=Math.max(1,Math.round(im.width*sc)), h=Math.max(1,Math.round(im.height*sc));
+        var cvv=document.createElement("canvas"); cvv.width=w; cvv.height=h; var cx=cvv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,w,h); cx.drawImage(im,0,0,w,h);
+        pend.logo=cvv.toDataURL("image/jpeg",0.85); pend.logoW=w; pend.logoH=h; prev.src=pend.logo; prev.style.display="";
+      }; im.src=rd.result; }; rd.readAsDataURL(f);
+    };
+    q("#enLrm").onclick=function(){ pend.logo=""; pend.logoW=0; pend.logoH=0; prev.style.display="none"; q("#enL").value=""; };
+    q("#enX").onclick=function(){ ov.remove(); };
+    q("form").onsubmit=function(ev){ ev.preventDefault();
+      var val={dentiste:q("#enD").value.trim(), cabinet:q("#enC").value.trim(), specialite:q("#enS").value.trim(),
+        adresse:q("#enA").value.trim(), telephone:q("#enT").value.trim(), email:q("#enM").value.trim(),
+        logo:pend.logo, logoW:pend.logoW, logoH:pend.logoH};
       try{ localStorage.setItem(ENTETE_KEY, JSON.stringify(val)); }catch(_){}
       try{ window.__ADIA_ENTETE__=val; }catch(_){}
-      ov.remove(); startEntetePatching();
+      ov.remove(); startEntetePatching(); patchEntete();
     };
   }
   function nativeSaveButton(){
