@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Fiche intervention – v4.7</title>
+<title>Fiche intervention – v4.8</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#173a63">
 <link rel="icon" href="icon-192.png">
@@ -184,7 +184,7 @@
     <div id="warn" class="warn" style="display:none"></div>
   </div>
 
-  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.7</span></h1>
+  <h1>FICHE INTERVENTION <span style="font-size:12px;font-weight:normal;color:#888;vertical-align:middle" id="appver">v4.8</span></h1>
 
   <!-- Identité -->
   <div class="ident">
@@ -1447,7 +1447,7 @@
   function applyExtraction(o){
     function setVal(id,v){ var el=document.getElementById(id); if(el && v!=null){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); } }
     function chk(id,v){ var el=document.getElementById(id); if(el){ el.checked=!!v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
-    if(o.description){ var d=document.getElementById("description"); if(d){ d.value=(d.value?d.value+"\n":"")+o.description; d.dispatchEvent(new Event("input",{bubbles:true})); } }
+    /* la description est désormais insérée en amont (texte dicté brut), on ne double pas ici */
     if(o.avulsion==="oui"){ chk("avul_oui",true); chk("avul_non",false); }
     else if(o.avulsion==="non"){ chk("avul_non",true); chk("avul_oui",false); }
     if(o.prf_rouge!=null){ setVal("prf_rouge_n",String(o.prf_rouge)); chk("prf_rouge", Number(o.prf_rouge)>0); }
@@ -1467,7 +1467,7 @@
   function withTimeout(p, ms){ return Promise.race([p, new Promise(function(_,rej){ setTimeout(function(){ rej({name:"TimeoutError"}); }, ms); })]); }
   async function toggleRecord(btn){
     if(recording){ rec && rec.stop(); return; }
-    setMsg("① Démarrage… (v4.7)");                       // preuve immédiate que le clic est pris
+    setMsg("① Démarrage… (v4.8)");                       // preuve immédiate que le clic est pris
     btn.textContent="⏳ Préparation…";
     if(!navigator.mediaDevices || !window.MediaRecorder){ setMsg("Ce navigateur ne gère pas le micro. Ouvrez la fiche dans Chrome ou Edge.",true); btn.textContent="🎤 Dicter la fiche"; return; }
     // Micro D'ABORD, tant que le clic est "frais" (sinon le navigateur bloque
@@ -1500,21 +1500,32 @@
       stream.getTracks().forEach(function(t){t.stop();});
       recording=false; btn.textContent="🎤 Dicter la fiche"; btn.style.background="#1a3e6f";
       var blob=new Blob(chunks,{type: rec.mimeType||"audio/webm"});
-      if(blob.size<600){ setMsg("Enregistrement trop court — reparlez un peu plus longtemps.",true); return; }
+      if(blob.size<1200){ setMsg("Rien n'a été capté (micro muet ou dictée trop courte). Vérifiez que le BON micro est actif dans Windows, puis reparlez plus longtemps.",true); return; }
+      var td;
       try{
-        setMsg("Transcription...");
+        setMsg("⑤ Transcription en cours…");
         var form=new FormData(); form.append("audio",blob,"dictee.webm");
         form.append("glossary", ficheGlossary());
         form.append("context", "Dictée opératoire télégraphique en implantologie : numéros de dents (ex. 14, 26, 36), abréviations (exp = exposition, BPRF, CPRI, ALV, WYART), systèmes d'implant (actif, parallèle). Restituer ces termes tels quels.");
         var tr=await fetch(SB_URL+"/functions/v1/transcribe-audio",{method:"POST",headers:{"apikey":SB_KEY,"Authorization":"Bearer "+token()},body:form});
-        var td=await tr.json();
-        if(tr.status===401){ setToken(""); setMsg("Session expiree — recliquez pour vous reconnecter.",true); return; }
-        if(!tr.ok || !td.text){ throw new Error((td && td.error) || ("Transcription: HTTP "+tr.status)); }
-        setMsg("Analyse de la dictee...");
-        var o=await extract(td.text);
-        var n=applyExtraction(o);
-        setMsg("✓ Fiche remplie ("+n+" element(s) coche(s)). Transcription : « "+td.text.slice(0,80)+"... »");
-      }catch(err){ setMsg("Erreur : "+(err.message||err),true); }
+        if(tr.status===401){ setToken(""); setMsg("Connexion ADIA expirée — recliquez « Dicter la fiche » pour vous reconnecter.",true); return; }
+        td=await tr.json().catch(function(){ return {}; });
+        if(!tr.ok){ throw new Error((td && td.error) || ("Transcription refusée (HTTP "+tr.status+")")); }
+        if(!td.text || !td.text.trim()){ setMsg("Transcription revenue vide — parlez plus fort/plus près du micro, puis réessayez.",true); return; }
+      }catch(err){
+        var m=String((err && err.message) || err);
+        if(/Failed to fetch|NetworkError|load failed/i.test(m)) setMsg("Pas d'accès internet pour la transcription. Vérifiez la connexion puis réessayez.",true);
+        else setMsg("Transcription : "+m,true);
+        return;
+      }
+      // On écrit TOUJOURS ce qui a été dicté dans « Intervention » (même si l'analyse échoue) :
+      var d=document.getElementById("description");
+      if(d){ d.value=(d.value ? d.value+"\n" : "")+td.text.trim(); d.dispatchEvent(new Event("input",{bubbles:true})); }
+      setMsg("⑥ Analyse (matériel, PRF, avulsion)…");
+      var n=0;
+      try{ var o=await extract(td.text); n=applyExtraction(o); }
+      catch(e){ /* l'analyse est un bonus : le texte dicté est déjà écrit */ }
+      setMsg("✓ Dicté : « "+td.text.trim().slice(0,90)+(td.text.trim().length>90?"…":"")+" »"+(n?(" — "+n+" élément(s) coché(s)"):" — texte inséré dans « Intervention »."));
     };
     rec.start(); recording=true; btn.textContent="⏹️ Terminer la dictée"; btn.style.background="#b0243a";
     setMsg("🔴 Enregistrement en cours — parlez, puis recliquez pour terminer.");
